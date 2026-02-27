@@ -27,7 +27,7 @@ import urllib.error
 from datetime import datetime, timezone
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-REPO_OWNER   = "PhanesGuild"
+REPO_OWNER   = "PhanesGuildSoftware"   # default; overridden by version.json at runtime
 REPO_NAME    = "Kjer-upgrades"
 TIMEOUT_SECS = 120
 # ─────────────────────────────────────────────────────────────────────────────
@@ -114,9 +114,14 @@ def download_and_apply(version: str, github_token: str, install_path: str) -> di
     if not os.path.isdir(install_path):
         return _result(False, f"Install path not found: {install_path}")
 
+    # Read repo owner/name from version.json (falls back to module constants)
+    vdata    = _read_version_json(install_path)
+    owner    = vdata.get("repo_owner", REPO_OWNER)
+    reponame = vdata.get("repo_name",  REPO_NAME)
+
     # GitHub API URL for the versioned tarball
     api_url = (
-        f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
+        f"https://api.github.com/repos/{owner}/{reponame}"
         f"/tarball/v{version}"
     )
 
