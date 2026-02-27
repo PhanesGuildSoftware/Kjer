@@ -1,0 +1,233 @@
+# Kjer Comprehensive Defensive Security Tools Database
+# Linux defensive tools organized by security function
+# Each tool includes compatibility, dependencies, and resource metrics
+
+# Defense/Prevention Tools
+defense:
+  fail2ban:
+    binary: fail2ban-client
+    description: "Intrusion prevention software that scans logs and bans IPs showing malicious signs"
+    packages:
+      apt: fail2ban
+      dnf: fail2ban
+      pacman: fail2ban
+      zypper: fail2ban
+    tags: [intrusion-prevention, firewall, defense, automated-blocking]
+    metrics:
+      estimated_size_mb: 1.5
+      dependencies_size_mb: 3.0
+      ram_required_mb: 64
+    dependencies: []
+    config_file: /etc/fail2ban/jail.local
+    
+  chkrootkit:
+    binary: chkrootkit
+    description: "Rootkit detection tool for identifying rootkits and malware on Linux systems"
+    packages:
+      apt: chkrootkit
+      dnf: chkrootkit
+      pacman: chkrootkit
+      zypper: chkrootkit
+    tags: [rootkit-detection, malware-scanning, defense]
+    metrics:
+      estimated_size_mb: 0.8
+      dependencies_size_mb: 2.0
+      ram_required_mb: 128
+    dependencies: []
+    
+  rkhunter:
+    binary: rkhunter
+    description: "Rootkit hunter - scans for rootkits, backdoors and local exploits"
+    packages:
+      apt: rkhunter
+      dnf: rkhunter
+      pacman: rkhunter
+      zypper: rkhunter
+    tags: [rootkit-detection, malware-scanning, defense, threat-hunting]
+    metrics:
+      estimated_size_mb: 0.5
+      dependencies_size_mb: 2.5
+      ram_required_mb: 96
+    dependencies: []
+    config_file: /etc/rkhunter.conf
+    
+  apparmor:
+    binary: aa-enabled
+    description: "Linux application security module providing mandatory access control"
+    packages:
+      apt: apparmor apparmor-utils
+      dnf: apparmor-userspace
+      pacman: apparmor
+      zypper: apparmor
+    tags: [mac, mandatory-access-control, defense, sandboxing]
+    metrics:
+      estimated_size_mb: 2.0
+      dependencies_size_mb: 4.0
+      ram_required_mb: 128
+    dependencies: [libapparmor1]
+    
+  ufw:
+    binary: ufw
+    description: "Uncomplicated Firewall - user-friendly interface to iptables/nftables"
+    packages:
+      apt: ufw
+      dnf: ufw
+      pacman: ufw
+      zypper: ufw
+    tags: [firewall, network-defense, defense, policy-enforcement]
+    metrics:
+      estimated_size_mb: 0.3
+      dependencies_size_mb: 1.0
+      ram_required_mb: 32
+    dependencies: []
+
+# Hardening/Detection Tools
+hardening:
+  lynis:
+    binary: lynis
+    description: "Security auditing tool and hardening utility for Linux systems"
+    packages:
+      apt: lynis
+      dnf: lynis
+      pacman: lynis
+      zypper: lynis
+    tags: [auditing, hardening, assessment, cis-compliance]
+    metrics:
+      estimated_size_mb: 1.2
+      dependencies_size_mb: 2.0
+      ram_required_mb: 64
+    dependencies: []
+    config_file: /etc/lynis/default.prf
+    
+  aide:
+    binary: aide
+    description: "Advanced Intrusion Detection Environment - file integrity monitoring"
+    packages:
+      apt: aide aide-common
+      dnf: aide
+      pacman: aide
+      zypper: aide
+    tags: [file-integrity, fim, detection, compliance]
+    metrics:
+      estimated_size_mb: 0.8
+      dependencies_size_mb: 3.5
+      ram_required_mb: 256
+    dependencies: []
+    config_file: /etc/aide/aide.conf
+    
+  tiger:
+    binary: tiger
+    description: "TIGER - Security checking tool for Unix systems"
+    packages:
+      apt: tiger
+      dnf: tiger
+      pacman: tiger
+      zypper: tiger
+    tags: [security-checking, hardening, assessment]
+    metrics:
+      estimated_size_mb: 0.6
+      dependencies_size_mb: 2.0
+      ram_required_mb: 96
+    dependencies: [gawk, grep, perl]
+    
+  tripwire:
+    binary: tripwire
+    description: "File integrity checking and system monitoring tool"
+    packages:
+      apt: tripwire
+      dnf: tripwire
+      pacman: tripwire
+      zypper: tripwire
+    tags: [file-integrity, fim, detection, compliance]
+    metrics:
+      estimated_size_mb: 1.0
+      dependencies_size_mb: 2.5
+      ram_required_mb: 128
+    dependencies: []
+    config_file: /etc/tripwire/tw.pol
+
+# Event Auditing Tools
+auditing:
+  auditd:
+    binary: auditctl
+    description: "Linux audit framework for monitoring system calls and security events"
+    packages:
+      apt: auditd audispd-plugins
+      dnf: audit
+      pacman: audit
+      zypper: audit
+    tags: [auditing, monitoring, logging, forensics]
+    metrics:
+      estimated_size_mb: 0.5
+      dependencies_size_mb: 1.5
+      ram_required_mb: 128
+    dependencies: []
+    config_file: /etc/audit/audit.rules
+    
+# EDR/Detection Tools
+edr:
+  clamav:
+    binary: clamscan
+    description: "Open-source antivirus engine - malware detection and removal"
+    packages:
+      apt: clamav clamav-daemon clamav-freshclam
+      dnf: clamav clamav-daemon clamav-freshclam
+      pacman: clamav
+      zypper: clamav clamav-daemon
+    tags: [antivirus, malware-detection, edr, scanning]
+    metrics:
+      estimated_size_mb: 100.0
+      dependencies_size_mb: 150.0
+      ram_required_mb: 512
+    dependencies: [curl, wget]
+    virus_db: /var/lib/clamav/
+
+# Monitoring/Response Tools
+monitoring:
+  osquery:
+    binary: osqueryi
+    description: "Operating system instrumentation framework - query system data"
+    packages:
+      apt: osquery
+      dnf: osquery
+      pacman: osquery
+      zypper: osquery
+    tags: [monitoring, osint, forensics, detection]
+    metrics:
+      estimated_size_mb: 30.0
+      dependencies_size_mb: 20.0
+      ram_required_mb: 256
+    dependencies: []
+    config_file: /etc/osquery/osquery.conf
+
+# Profile Definitions (Pre-configured tool sets)
+profiles:
+  minimal_defense:
+    name: "Minimal Defense"
+    description: "Essential defensive tools for basic system protection"
+    tools: [fail2ban, ufw, clamav]
+    use_cases: [basic-protection, vps, small-server]
+    
+  standard_security:
+    name: "Standard Security"
+    description: "Balanced defensive setup with detection and hardening"
+    tools: [fail2ban, ufw, clamav, lynis, aide, auditd, apparmor]
+    use_cases: [production-server, web-server, general-security]
+    
+  enterprise_security:
+    name: "Enterprise Security"
+    description: "Comprehensive security suite for enterprise systems"
+    tools: [fail2ban, ufw, clamav, lynis, aide, auditd, apparmor, chkrootkit, rkhunter, tiger, osquery]
+    use_cases: [production-environment, critical-system, compliance]
+    
+  incident_response:
+    name: "Incident Response"
+    description: "Tools optimized for threat detection and forensic analysis"
+    tools: [auditd, chkrootkit, rkhunter, osquery, lynis, aide, tripwire]
+    use_cases: [incident-investigation, forensics, threat-hunting]
+    
+  hardened_system:
+    name: "Hardened System"
+    description: "Maximum hardening with all detection and prevention tools"
+    tools: [fail2ban, ufw, clamav, lynis, aide, auditd, apparmor, chkrootkit, rkhunter, tiger, tripwire, osquery]
+    use_cases: [high-security, compliance, forensics, monitoring]

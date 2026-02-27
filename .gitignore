@@ -1,0 +1,47 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.eggs/
+
+# ── PyArmor build output ──────────────────────────────────────────────────────
+dist/
+pyarmor.bug.log
+pyarmor.log
+
+# ── Node / Electron ───────────────────────────────────────────────────────────
+desktop/node_modules/
+desktop/package-lock.json
+node_modules/
+
+# ── Dev/build tools (never ship) ─────────────────────────────────────────────
+scripts/generate_key.py
+copy-pyarmor-runtime.sh
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+kjer-venv/
+venv/
+.venv/
+env/
+
+# ── OS artifacts ─────────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+__MACOSX/
+**/__MACOSX/
+*.zip
+Thumbs.db
+desktop.ini
+
+# ── Editor artifacts ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Runtime state (user-local, not source) ───────────────────────────────────
+# ~/.kjer/ is outside the repo so no need to list it here

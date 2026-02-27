@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Kjer - Professional Security Framework">
+    <title>Kjer - Security Framework</title>
+    <link rel="icon" type="image/png" href="kjer_logo.PNG?v=2026">
+    <link rel="shortcut icon" type="image/png" href="kjer_logo.PNG?v=2026">
+    <link rel="apple-touch-icon" href="kjer_logo.PNG?v=2026">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Tomorrow:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Tourney:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="main-content">
+            <!-- Sidebar Navigation -->
+            <aside class="sidebar">
+                <div class="logo">
+                    <img src="kjer_logo.PNG" alt="Kjer Framework" class="logo-icon">
+                    <p class="logo-version" id="sidebarVersion">—</p>
+                    <button class="sidebar-upgrade-btn" onclick="showActivationModal()" title="Enter a new license key to upgrade your tier">⬆ Upgrade</button>
+                    <div class="network-status" id="networkStatus">
+                        <span id="statusIcon">⟳</span>
+                        <span id="statusText">Connecting</span>
+                    </div>
+                </div>
+                <nav class="nav">
+                    <button class="nav-item active geo-regular" data-tab="dashboard" onclick="switchTab('dashboard')">
+                        <i class="icon icon-dashboard"></i> Dashboard
+                    </button>
+                    <button class="nav-item geo-regular" data-tab="tools" onclick="switchTab('tools')">
+                        <i class="icon icon-tools"></i> Tools
+                    </button>
+                    <button class="nav-item geo-regular" data-tab="profiles" onclick="switchTab('profiles')">
+                        <i class="icon icon-profiles"></i> Profiles
+                    </button>
+                    <button class="nav-item geo-regular" data-tab="status" onclick="switchTab('status')">
+                        <i class="icon icon-status"></i> Status & Logs
+                    </button>
+                    <button class="nav-item geo-regular" data-tab="settings" onclick="switchTab('settings')">
+                        <i class="icon icon-settings"></i> Settings
+                    </button>
+                </nav>
+            </aside>
+
+            <!-- Tab Content -->
+            <main class="tab-container">
+                <!-- Dashboard Tab -->
+                <div id="dashboard" class="tab-content active">
+                    <h2 class="page-header">Dashboard</h2>
+                    <div class="card full-width">
+                        <h3>Quick Actions</h3>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" onclick="initializeKjer()"><i class="icon icon-refresh"></i> Initialize</button>
+                            <button class="btn btn-primary" onclick="performComprehensiveScan()"><i class="icon icon-scan"></i> Scan</button>
+                            <button class="btn btn-primary" onclick="activateSmartDefense()"><i class="icon icon-shield"></i> Defend</button>
+                            <button class="btn btn-primary" onclick="generateReport()"><i class="icon icon-report"></i> Report</button>
+                        </div>
+                    </div>
+                    <!-- Activity Monitoring Panel -->
+                    <div class="card full-width activity-panel">
+                        <div class="activity-header">
+                            <h3>Security Activity Monitor</h3>
+                            <button class="btn-small" onclick="clearActivityLog()">Clear Log</button>
+                        </div>
+                        <div id="mainActivityLog" class="activity-log-container">
+                            <div class="log-header">
+                                <div class="log-col-time">Time</div>
+                                <div class="log-col-level">Level</div>
+                                <div class="log-col-message">Message</div>
+                            </div>
+                            <div id="logEntries" class="log-entries">
+                                <div class="log-entry">
+                                    <div class="log-col-time">--:--:--</div>
+                                    <div class="log-level info">INFO</div>
+                                    <div class="log-col-message">Initializing security framework...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <h3>System Status</h3>
+                            <p class="status-badge" id="systemStatusBadge"><i class="icon icon-check"></i> <span id="systemStatusText">Detecting...</span></p>
+                            <p class="small">OS: <span id="osName">Detecting...</span></p>
+                            <p class="small">Last updated: <span id="lastUpdate">just now</span></p>
+                        </div>
+                        <div class="card">
+                            <h3>Active Tools</h3>
+                            <p class="stat-number" id="activeToolsCount">0</p>
+                            <p class="small">Security tools installed</p>
+                        </div>
+                        <div class="card">
+                            <h3>Installed Profiles</h3>
+                            <p class="stat-number" id="installedProfilesCount">0</p>
+                            <p class="small">Pre-configured tool sets</p>
+                        </div>
+                        <div class="card">
+                            <h3>License Status</h3>
+                            <p class="status-badge" id="licenseStatusBadge"><i class="icon icon-info"></i> <span id="licenseStatusText">Not Activated</span></p>
+                            <p class="small" id="licenseVersionText">Activate to unlock features</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tools Tab -->
+                <div id="tools" class="tab-content">
+                    <h2 class="page-header">Tool Box</h2>
+                    <div class="toolbox-filters">
+                        <button class="filter-btn active" onclick="filterToolsByStatus('all')">All</button>
+                        <button class="filter-btn" onclick="filterToolsByStatus('installed')">Installed</button>
+                        <button class="filter-btn" onclick="filterToolsByStatus('available')">Available</button>
+                        <button class="filter-btn" onclick="filterToolsByTop(5)">Top 5</button>
+                        <button class="filter-btn" onclick="filterToolsByTop(20)">Top 20</button>
+                    </div>
+                    <div class="search-bar">
+                        <input type="text" id="toolSearch" placeholder="Search tools..." 
+                               oninput="filterTools(this.value)" class="search-input">
+                        <select id="categoryFilter" onchange="filterTools()" class="filter-select">
+                            <option value="">All Categories</option>
+                            <option value="EDR">EDR & Anti-Malware</option>
+                            <option value="Network">Network Security</option>
+                            <option value="Analysis">Malware Analysis</option>
+                            <option value="SIEM">SIEM & Logging</option>
+                            <option value="Vulnerability">Vulnerability Mgmt</option>
+                            <option value="Hardening">System Hardening</option>
+                            <option value="Incident">Incident Response</option>
+                            <option value="Threat">Threat Intelligence</option>
+                            <option value="Utility">Utilities</option>
+                        </select>
+                    </div>
+                    <div id="toolsList" class="tools-grid">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Profiles Tab -->
+                <div id="profiles" class="tab-content">
+                    <h2 class="page-header">Installation Profiles</h2>
+                    <p class="description">Pre-configured tool sets for different security scenarios - <span style="color: #9D4EDD; font-weight: bold;">Available in v1.1.0+</span></p>
+                    <div id="profilesList" class="profiles-grid">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Status & Logs Tab -->
+                <div id="status" class="tab-content">
+                    <h2 style="text-align: center; color: #000000; font-family: 'Tomorrow', sans-serif;">System Status & Activity Log</h2>
+                    <div class="status-section">
+                        <h3>System Information</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">Operating System</span>
+                                <span class="metric-value" id="statusPageOS">Detecting...</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Initialization Status</span>
+                                <span class="metric-value" id="statusPageInit">Not Initialized</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Active Tools</span>
+                                <span class="metric-value" id="statusPageTools">0</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">License Status</span>
+                                <span class="metric-value" id="statusPageLicense">Not Activated</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="log-section">
+                        <h3>Recent Activity Log</h3>
+                        <div id="activityLog" class="log-container">
+                            <!-- Activity log entries will be populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settings" class="tab-content">
+                    <h2 class="page-header">Settings & Configuration</h2>
+                    <div class="settings-section">
+                        <h3>Upgrade Licence</h3>
+                        <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 14px;">Current Plan: <strong style="color: #9D4EDD;">Not Activated</strong></p>
+                        <button class="btn btn-primary" onclick="showUpgradeModal()" style="width: 100%; margin-bottom: 10px;"><i class="icon icon-premium"></i> View Plans & Upgrade</button>
+                        <p style="color: #888; font-size: 12px; margin-top: 10px;">Unlock advanced tools and features with a paid license.</p>
+                    </div>
+                    <div class="settings-section">
+                        <h3>Documentation & Resources</h3>
+                        <button class="btn btn-primary" onclick="openManual()" style="width: 100%; margin-bottom: 20px;">View Kjer Manual & Tool Documentation</button>
+                        <button class="btn btn-outline btn-small" onclick="restartTutorial()" style="width: 180px; margin: 0 auto 20px auto; display: block;">Restart Tutorial</button>
+                    </div>
+                    <div class="settings-section">
+                        <h3 style="text-align: center; margin-bottom: 30px;">Application Settings</h3>
+                        <div style="max-width: 400px; margin: 0 auto;">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="autoRefresh" checked onchange="saveSetting('autoRefresh', this.checked)">
+                                    Enable Auto-Refresh
+                                </label>
+                                <small>Automatically update system status every 5 minutes</small>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="notifications" checked onchange="saveSetting('notifications', this.checked)">
+                                    Enable Notifications
+                                </label>
+                                <small>Show notifications for important events</small>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="darkMode" onchange="saveSetting('darkMode', this.checked)">
+                                    Dark Mode
+                                </label>
+                                <small>Use dark theme for the interface</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>Tool Management</h3>
+                        <div class="form-group">
+                            <label>Default Installation Path:</label>
+                            <input type="text" value="C:\Program Files\Kjer\tools" class="form-input" onchange="saveSetting('installPath', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" checked onchange="saveSetting('autoUpdate', this.checked)">
+                                Check for Tool Updates on Startup
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3>System Information</h3>
+                        <table class="info-table">
+                            <tr>
+                                <td>Application Version</td>
+                                <td id="sysInfoVersion">—</td>
+                            </tr>
+                            <tr>
+                                <td>Install Date</td>
+                                <td id="sysInfoInstallDate">—</td>
+                            </tr>
+                            <tr>
+                                <td>Platform</td>
+                                <td id="sysInfoPlatform">—</td>
+                            </tr>
+                            <tr>
+                                <td>Total Tools Available</td>
+                                <td id="sysInfoToolCount">—</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="settings-section">
+                        <h3 style="text-align: center; margin-bottom: 30px;">Advanced Options</h3>
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 15px; max-width: 300px; margin: 0 auto;">
+                            <button class="btn btn-primary" onclick="resetSettings()" style="width: 100%;"><i class="icon icon-refresh"></i> Reset to Defaults</button>
+                            <button class="btn btn-primary" onclick="clearCache()" style="width: 100%;"><i class="icon icon-delete"></i> Clear Cache</button>
+                            <button class="btn btn-primary" onclick="exportSettings()" style="width: 100%;"><i class="icon icon-download"></i> Export Settings</button>
+                        </div>
+                        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(176, 224, 230, 0.2); text-align: center;">
+                            <h4 style="color: #9D4EDD; margin-bottom: 15px;">Download Configuration</h4>
+                            <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 14px;">Export your Kjer configuration for backup or deployment:</p>
+                            <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                                <button class="btn btn-primary" onclick="downloadConfiguration('json')" style="font-size: 12px;"><i class="icon icon-download"></i> JSON</button>
+                                <button class="btn btn-primary" onclick="downloadConfiguration('yaml')" style="font-size: 12px;"><i class="icon icon-download"></i> YAML</button>
+                                <button class="btn btn-primary" onclick="downloadConfiguration('txt')" style="font-size: 12px;"><i class="icon icon-download"></i> Text</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="text-align: center;">
+                        <h3 class="container-title">Version & Upgrades</h3>
+                        <p style="color: #B0E0E6; margin: 15px 0 5px 0; font-size: 13px;">Current version: <strong id="currentVersionDisplay">—</strong></p>
+                        <p style="color: #9D4EDD; margin: 0 0 15px 0; font-size: 11px; font-weight: 600;" id="currentVersionType">—</p>
+                        <p style="color: #B0E0E6; margin: 15px 0 5px 0; font-size: 13px;">Accessible version: <strong id="accessibleVersionDisplay">—</strong></p>
+                        <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 12px;">Unlock more tools by upgrading</p>
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                            <input type="text" id="upgradeKeyInput" class="form-input" placeholder="KJER-UPGRADE-XXXX-XXXX-XXXX" maxlength="28" style="flex: 1; text-transform: uppercase; font-family: monospace;">
+                            <button class="btn btn-primary" onclick="applyUpgradeKey()" style="flex: 0.5;">Apply</button>
+                        </div>
+                        <button class="btn btn-primary" onclick="checkAvailableTools()" style="width: 100%; background-color: rgba(33, 150, 243, 0.3); border-color: #2196F3; color: #2196F3;">View Available Tools</button>
+                    </div>
+
+                    <div class="card" style="text-align: center;">
+                        <h3 class="container-title" style="color: #FF6B6B;">Reset Application</h3>
+                        <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 13px;">Clear app state while keeping your license active on this system.</p>
+                        <button class="btn btn-primary" onclick="confirmResetApplication()" style="background-color: rgba(255, 107, 107, 0.3); border-color: #FF6B6B; color: #FF6B6B; display: block; margin: 0 auto;"><i class="icon icon-refresh"></i> Reset</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2026 Kjer Framework - Professional Security Tools | <a href="#">Documentation</a> | <a href="#">Support</a> | <a href="#">Privacy</a></p>
+        </footer>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div id="tutorialModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="tutorialTitle" class="page-header">Welcome to Kjer</h2>
+            </div>
+            <div class="modal-body">
+                <p id="tutorialText"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="tutorialSkip()">Skip Tutorial</button>
+                <button class="btn btn-outline" id="tutorialBack" onclick="tutorialPrevious()" style="display: none;">Back</button>
+                <button class="btn btn-primary" id="tutorialNext" onclick="tutorialNext()">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activation Modal -->
+    <div id="activationModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 class="page-header" style="margin: 0; flex: 1; text-align: center;">KJER UPGRADE</h2>
+                <button onclick="closeActivationModal()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #B0E0E6; margin-bottom: 20px; text-align: center;">
+                    Enter your license key to activate or upgrade Kjer. Each license is bound to this machine.
+                </p>
+                <div class="form-group">
+                    <label style="color: #9D4EDD;">License Key</label>
+                    <input type="text" id="licenseKeyInput" class="form-input" placeholder="KJER-VERSION-XXXX-XXXX-XXXX" maxlength="28" style="text-transform: uppercase; font-family: monospace;">
+                </div>
+                <button class="btn btn-primary" onclick="activateKjer()" style="width: 100%; margin-top: 20px;">
+                    <i class="icon icon-check"></i> Apply Key
+                </button>
+                <div id="activationStatus" style="margin-top: 15px; text-align: center;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual/Documentation Modal -->
+    <div id="manualModal" class="modal" style="display: none;">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 class="page-header">Kjer Manual & Tool Documentation</h2>
+                <button class="modal-close" onclick="closeManual()">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="manualContent" style="max-height: 600px; overflow-y: auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Wizard Modal -->
+    <div id="reportWizardModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 580px;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 class="page-header" style="margin: 0;">Generate Security Report</h2>
+                <span id="reportWizardStepLabel" style="color: #9D4EDD; font-size: 13px; font-weight: 600;">Step 1 of 3</span>
+            </div>
+
+            <!-- Page 1: Content Selection -->
+            <div id="reportPage1" class="modal-body">
+                <p style="color: #B0E0E6; margin-bottom: 18px; font-size: 13px;">Select the sections to include in your report:</p>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <label class="report-check-row"><input type="checkbox" id="rpt_threats" checked>
+                        <span><strong>Detected Threats &amp; Findings</strong><br><small>Critical, high, and medium findings from the last scan</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_defense" checked>
+                        <span><strong>Defensive Actions Taken</strong><br><small>Actions applied by Smart Defense and their outcomes</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_vulns" checked>
+                        <span><strong>Vulnerability Analysis Results</strong><br><small>CVEs and exploit paths found by Nessus / OpenVAS / GVM</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_network">
+                        <span><strong>Network &amp; Traffic Analysis</strong><br><small>Anomalies detected by Wireshark, Suricata, and Zeek</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_integrity">
+                        <span><strong>File Integrity Check Results</strong><br><small>Unauthorised changes reported by AIDE / Tripwire</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_compliance" checked>
+                        <span><strong>Compliance &amp; Audit Summary</strong><br><small>CIS Benchmark scores, Lynis hardening index, audit events</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_sysinfo" checked>
+                        <span><strong>System Information</strong><br><small>OS, version, install date, hardware ID</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_tools">
+                        <span><strong>Installed Tools Inventory</strong><br><small>Full list of managed security tools and their status</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_actlog">
+                        <span><strong>Security Activity Log</strong><br><small>Recent log entries from the Security Activity Monitor</small></span></label>
+                </div>
+            </div>
+
+            <!-- Page 2: Format Selection -->
+            <div id="reportPage2" class="modal-body" style="display: none;">
+                <p style="color: #B0E0E6; margin-bottom: 18px; font-size: 13px;">Choose the output format for your report:</p>
+                <div style="display: flex; flex-direction: column; gap: 14px;">
+                    <label class="report-radio-row">
+                        <input type="radio" name="reportFormat" value="txt" checked>
+                        <span><strong>Plain Text (.txt)</strong><br><small>Human-readable, printable, compatible with any editor</small></span>
+                    </label>
+                    <label class="report-radio-row">
+                        <input type="radio" name="reportFormat" value="md">
+                        <span><strong>Markdown (.md)</strong><br><small>Structured with headings and tables — ideal for GitHub / documentation</small></span>
+                    </label>
+                    <label class="report-radio-row">
+                        <input type="radio" name="reportFormat" value="html">
+                        <span><strong>HTML Report (.html)</strong><br><small>Styled, printable in a browser — best for sharing or printing</small></span>
+                    </label>
+                    <label class="report-radio-row">
+                        <input type="radio" name="reportFormat" value="json">
+                        <span><strong>JSON (.json)</strong><br><small>Machine-readable — suitable for SIEM ingestion or scripting</small></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Page 3: Save Location -->
+            <div id="reportPage3" class="modal-body" style="display: none;">
+                <p style="color: #B0E0E6; margin-bottom: 18px; font-size: 13px;">Choose where to save the report:</p>
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="color: #9D4EDD; font-size: 13px;">Save Path</label>
+                    <input type="text" id="reportSavePath" class="form-input" placeholder="~/Documents/kjer-report-2026-02-27.txt" style="font-family: monospace; font-size: 12px;">
+                    <p style="color: #888; font-size: 11px; margin-top: 6px;">Leave blank to save to your Documents folder. Enter a full path to choose a custom location.</p>
+                </div>
+                <div id="reportSavePreview" style="background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.3); border-radius: 6px; padding: 12px; font-size: 12px; color: #B0E0E6;">
+                    <strong style="color: #9D4EDD;">Report summary:</strong>
+                    <div id="reportPreviewText" style="margin-top: 8px; line-height: 1.8;"></div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeReportWizard()">Cancel</button>
+                <button class="btn btn-outline" id="reportWizardBack" onclick="reportWizardBack()" style="display: none;">Back</button>
+                <button class="btn btn-primary" id="reportWizardNext" onclick="reportWizardNext()">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

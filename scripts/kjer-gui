@@ -1,0 +1,34 @@
+#!/bin/bash
+# Kjer GUI Launcher for Linux
+# Launches the Electron-based GUI application
+
+# Resolve real script location even when called through a symlink
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+DESKTOP_DIR="$SCRIPT_DIR/../desktop"
+KJER_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Resolve Electron binary: local install preferred, fall back to global
+LOCAL_ELECTRON="$DESKTOP_DIR/node_modules/.bin/electron"
+if [ -x "$LOCAL_ELECTRON" ]; then
+    ELECTRON_BIN="$LOCAL_ELECTRON"
+elif command -v electron &> /dev/null; then
+    ELECTRON_BIN="$(command -v electron)"
+else
+    echo "Error: Electron is not installed."
+    echo ""
+    echo "Run the dependency installer:"
+    echo "  bash $KJER_ROOT/installer/kjer-install.sh"
+    echo ""
+    echo "Or install manually:"
+    echo "  cd $DESKTOP_DIR && npm install"
+    exit 1
+fi
+
+# Check if desktop directory exists
+if [ ! -d "$DESKTOP_DIR" ]; then
+    echo "Error: Kjer desktop directory not found at $DESKTOP_DIR"
+    exit 1
+fi
+
+# Launch Electron GUI
+cd "$DESKTOP_DIR" && "$ELECTRON_BIN" . "$@"

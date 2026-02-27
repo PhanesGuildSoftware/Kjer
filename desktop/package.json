@@ -1,0 +1,14 @@
+{
+  "name": "kjer-desktop",
+  "version": "1.0.0",
+  "description": "Kjer Security Framework Desktop Wrapper",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "PhanesGuild Software",
+  "license": "Commercial",
+  "devDependencies": {
+    "electron": "^29.0.0"
+  }
+}
