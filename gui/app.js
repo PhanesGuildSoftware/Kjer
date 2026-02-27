@@ -801,7 +801,7 @@ async function performVersionUpgrade(version, githubToken) {
             return false;
         }
 
-        logActivity(`Connecting to PhanesGuild/Kjer-upgrades (v${version})…`, 'info');
+        logActivity(`Connecting to PhanesGuildSoftware/Kjer-upgrades (v${version})…`, 'info');
 
         const upgradeScript = `${installPath}/lib/upgrade_manager.py`;
         const result = await window.electronAPI.executeCommand('python3', [

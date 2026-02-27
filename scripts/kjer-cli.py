@@ -10,6 +10,8 @@ from pathlib import Path
 DB_PATH          = Path(__file__).resolve().parent.parent / 'db' / 'defensive-tools-db.yaml'
 BACKEND_API      = Path(__file__).resolve().parent.parent / 'lib' / 'backend_api.py'
 LICENSE_MANAGER  = Path(__file__).resolve().parent.parent / 'lib' / 'license_manager.py'
+UPGRADE_MANAGER  = Path(__file__).resolve().parent.parent / 'lib' / 'upgrade_manager.py'
+INSTALL_ROOT     = Path(__file__).resolve().parent.parent
 INIT_FLAG        = Path.home() / '.kjer' / 'initialized'
 INSTALL_STATE    = Path.home() / '.kjer' / 'install_state.json'
 
@@ -749,21 +751,53 @@ def upgrade_kjer():
 		print("  Your installed tools and settings will be preserved.")
 		print()
 
-		confirm = input("\033[1;33mReinitialize now? (y/yes/no):\033[0m ").strip().lower()
+		confirm = input("\033[1;33mDownload and apply upgrade now? (y/yes/no):\033[0m ").strip().lower()
 		if confirm not in ('y', 'yes'):
 			print()
-			print("\033[0;33m  Skipped. Your v{1} license is active.\033[0m".format(current_version, new_version))
-			print("  Run 'kjer --upgrade' or use menu option 9 at any time to reinitialize.")
+			print(f"\033[0;33m  Skipped. Your v{new_version} license is active.\033[0m")
+			print("  Run 'kjer --upgrade' or use menu option 9 at any time to apply the upgrade.")
+			return
+
+		# ── Download upgrade from private GitHub repo ─────────────────
+		github_token = result.get('github_token') or ''
+		if not github_token:
+			print("\n\033[1;31m✗ No upgrade token returned by the license server.\033[0m")
+			print("  Contact support if this persists.")
 			return
 
 		print()
-		print("\033[1;36m→ Reinitializing Kjer...\033[0m")
+		print(f"\033[1;36m→ Downloading Kjer v{new_version} from upgrade repository…\033[0m")
+
+		try:
+			up_result = subprocess.run(
+				[sys.executable, str(UPGRADE_MANAGER), new_version, github_token, str(INSTALL_ROOT)],
+				capture_output=True, text=True, timeout=180
+			)
+			parsed = json.loads((up_result.stdout or '').strip())
+		except json.JSONDecodeError:
+			print("\n\033[1;31m✗ Could not parse upgrade response.\033[0m")
+			print(f"  Raw output: {up_result.stdout or up_result.stderr or 'empty'}")
+			return
+		except subprocess.TimeoutExpired:
+			print("\n\033[1;31m✗ Upgrade download timed out. Check your connection.\033[0m")
+			return
+		except Exception as e:
+			print(f"\n\033[1;31m✗ Upgrade error: {e}\033[0m")
+			return
+
+		if not parsed.get('success'):
+			print(f"\n\033[1;31m✗ Upgrade failed: {parsed.get('message', 'Unknown error')}\033[0m")
+			return
+
+		print(f"\n\033[1;32m✓ Kjer v{new_version} downloaded and applied successfully.\033[0m")
+		print()
+		print("\033[1;36m→ Reinitializing Kjer…\033[0m")
 		reinit_result = BackendAPI.reinitialize()
 
 		if reinit_result.get('success'):
 			print(f"\n\033[1;32m✓ Kjer has been upgraded to v{new_version} and reinitialized successfully.\033[0m")
 		else:
-			print("\n\033[1;33m⚠ License activated but reinitialization encountered an issue.\033[0m")
+			print("\n\033[1;33m⚠ Upgrade applied but reinitialization encountered an issue.\033[0m")
 			err = reinit_result.get('error') or reinit_result.get('message') or ''
 			if err:
 				print(f"  {err}")
