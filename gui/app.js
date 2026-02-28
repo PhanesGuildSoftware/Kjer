@@ -417,14 +417,13 @@ async function initializeKjer() {
 
     // Initialization complete — tools and profiles are now fully operational
     setTimeout(() => {
-        logActivity('Initialization complete — tools and profiles are fully operational', 'success');
-        logActivity('Use the Tool Box to install, monitor, and manage security tools', 'info');
+        logActivity('Initialization complete — Kjer is fully operational', 'success', '', true);
         showNotification('✓ Kjer initialized successfully!');
     }, 2000);
 
     } catch (initErr) {
         localStorage.removeItem('kterInitialized');
-        logActivity(`Initialization failed: ${initErr.message || initErr}`, 'error');
+        logActivity(`Initialization failed: ${initErr.message || initErr}`, 'error', '', true);
         showNotification('✗ Initialization failed. Check the activity log for details.');
     }
 }
@@ -776,10 +775,10 @@ async function confirmUpgradeReinit(newVersion) {
     _pendingGithubToken = null;
 
     if (githubToken) {
-        logActivity(`Downloading Kjer v${newVersion} from upgrade repository…`, 'info');
+        logActivity(`Downloading Kjer v${newVersion} from upgrade repository…`, 'info', '', true);
         const upgraded = await performVersionUpgrade(newVersion, githubToken);
         if (!upgraded) {
-            logActivity('Upgrade download failed — your key is saved. Try the Upgrade button again later.', 'error');
+            logActivity('Upgrade download failed — your key is saved. Try the Upgrade button again later.', 'error', '', true);
             showNotification('✗ Upgrade download failed. Check the activity log.');
             return;
         }
@@ -828,18 +827,18 @@ async function performVersionUpgrade(version, githubToken) {
         }
 
         if (parsed.success) {
-            logActivity(`✓ ${parsed.message}`, 'success');
+            logActivity(`✓ ${parsed.message}`, 'success', '', true);
             localStorage.setItem('kterVersion', version);
             // Update sidebar version display immediately
             const sidebarVerEl = document.getElementById('sidebarVersion');
             if (sidebarVerEl) sidebarVerEl.textContent = `v${version}`;
             return true;
         } else {
-            logActivity(`✗ Upgrade: ${parsed.message}`, 'error');
+            logActivity(`✗ Upgrade: ${parsed.message}`, 'error', '', true);
             return false;
         }
     } catch (e) {
-        logActivity(`Upgrade error: ${e.message || e}`, 'error');
+        logActivity(`Upgrade error: ${e.message || e}`, 'error', '', true);
         return false;
     }
 }
@@ -1322,27 +1321,64 @@ const TOOLS_DATABASE = {
 const ActivityLog = {
     maxEntries: 200,
     entries: [],
-    
-    add: function(message, level = 'info', tool = '') {
+
+    // Messages matching these patterns are suppressed from the dashboard
+    // Recent Activity feed but still appear in the full Status & Logs view.
+    _noisePatterns: [
+        /^Switched to /i,
+        /^System booting/i,
+        /database loaded/i,
+        /database initialized/i,
+        /event listeners attached/i,
+        /dashboard initialized/i,
+        /verifying electron/i,
+        /electron runtime: already/i,
+        /electron dependency/i,
+        /dependency check skipped/i,
+        /activation state restored/i,
+        /initialization state restored/i,
+        /license key restored/i,
+        /os detected at install/i,
+        /loading personalized/i,
+        /tool database loaded/i,
+        /profile database loaded/i,
+        /cli integration check/i,
+        /application state reset/i,
+        /^Beginning Kjer initialization/i,
+        /^Activating security framework/i,
+        /^Use the Tool Box/i,
+    ],
+
+    _isDashboardWorthy: function(message, level, important) {
+        if (important) return true;
+        if (level === 'error' || level === 'warning' || level === 'critical') return true;
+        for (const pat of this._noisePatterns) {
+            if (pat.test(message)) return false;
+        }
+        return true;
+    },
+
+    add: function(message, level = 'info', tool = '', important = false) {
         const now = new Date();
         const timeStr = now.toLocaleTimeString('en-US', { hour12: true });
-        
+
         this.entries.unshift({
             time: timeStr,
             level: level,
             message: message,
             tool: tool,
+            important: important,
             timestamp: now
         });
-        
+
         // Keep only last 25 entries
         if (this.entries.length > this.maxEntries) {
             this.entries.pop();
         }
-        
+
         this.render();
     },
-    
+
     render: function() {
         const logEntries = document.getElementById('logEntries');
         if (!logEntries) return;
@@ -1362,8 +1398,8 @@ const ActivityLog = {
     }
 };
 
-function logActivity(message, level = 'info', tool = '') {
-    ActivityLog.add(message, level, tool);
+function logActivity(message, level = 'info', tool = '', important = false) {
+    ActivityLog.add(message, level, tool, important);
 }
 
 function showNotification(message) {
@@ -2676,7 +2712,7 @@ function performComprehensiveScan() {
 
     // ── Header ────────────────────────────────────────────────────
     logDivider();
-    logActivity('KJER SECURITY SCAN — ' + new Date().toLocaleTimeString(), 'warning');
+    logActivity('KJER SECURITY SCAN — ' + new Date().toLocaleTimeString(), 'warning', '', true);
     const os = localStorage.getItem('userDistro') || localStorage.getItem('userOS') || 'this system';
     logActivity(`Target: ${os}  |  Tools engaged: ${activePhases.reduce((a,[,t])=>a+t.length,0)}`, 'info');
     logDivider();
@@ -2727,13 +2763,11 @@ function performComprehensiveScan() {
                            : 'success';
 
         logDivider();
-        logActivity('SCAN COMPLETE — ' + elapsed + 's', summaryLevel);
+        logActivity('SCAN COMPLETE — ' + elapsed + 's', summaryLevel, '', true);
         logActivity(
             `Threat Level: ${threatLevel}  |  ` +
             `Critical: ${results.critical}  High: ${results.high}  ` +
-            `Medium: ${results.medium}  Low: ${results.low}`,
-            summaryLevel
-        );
+            `Medium: ${results.medium}  Low: ${results.low}`, summaryLevel, '', true);
 
         if (results.findings.length > 0) {
             logActivity(`${results.findings.length} finding(s) recorded — click DEFEND to apply countermeasures`, 'warning');
@@ -3353,13 +3387,11 @@ function activateSmartDefense() {
                     : 'HARDENED';
 
         logDivider();
-        logActivity('DEFENSE COMPLETE', actionsTotal > 0 ? 'success' : 'warning');
+        logActivity('DEFENSE COMPLETE', actionsTotal > 0 ? 'success' : 'warning', '', true);
         logActivity(
             `Actions taken: ${actionsTotal}  |  ` +
             `Tools engaged: ${toolsEngaged.size}  |  ` +
-            `Posture: ${posture}`,
-            actionsTotal > 0 ? 'success' : 'warning'
-        );
+            `Posture: ${posture}`, actionsTotal > 0 ? 'success' : 'warning', '', true);
         if (actionsTotal === 0) {
             logActivity('Install defensive tools (UFW, Fail2ban, ClamAV, AppArmor) for automated response', 'warning');
         }
@@ -3648,7 +3680,7 @@ async function installTool(toolName) {
         if (result.success) {
             setToolInstalled(toolName, false);
             showNotification(`${toolName} uninstalled successfully!`);
-            logActivity(`${toolName} uninstalled`, 'success');
+            logActivity(`${toolName} uninstalled`, 'success', '', true);
         } else {
             showNotification(`Failed to uninstall ${toolName}: ${result.message}`);
             logActivity(`${toolName} uninstallation failed: ${result.message}`, 'error');
@@ -3663,10 +3695,10 @@ async function installTool(toolName) {
         if (result.success) {
             setToolInstalled(toolName, true);
             showNotification(`${toolName} installed successfully!`);
-            logActivity(`${toolName} installation completed`, 'success');
+            logActivity(`${toolName} installation completed`, 'success', '', true);
         } else {
             showNotification(`Failed to install ${toolName}: ${result.message}`);
-            logActivity(`${toolName} installation failed: ${result.message}`, 'error');
+            logActivity(`${toolName} installation failed: ${result.message}`, 'error', '', true);
         }
     }
     
@@ -4208,22 +4240,22 @@ function logActivity(message) {
         }
     }
     
-    // Add to dashboard activity log
+    // Add to dashboard activity log (filtered — meaningful events only)
     const dashboardLog = document.getElementById('dashboardActivityLog');
-    if (dashboardLog) {
+    if (dashboardLog && ActivityLog._isDashboardWorthy(message, level, false)) {
         const logEntry = document.createElement('div');
         logEntry.className = 'log-entry';
-        
+
         logEntry.innerHTML = `
             <span class="log-time">${timeString}</span>
             <span class="log-level ${level}">${level.toUpperCase()}</span>
             <span class="log-message">${message}</span>
         `;
-        
+
         dashboardLog.insertBefore(logEntry, dashboardLog.firstChild);
-        
-        // Keep only last 5 entries for dashboard
-        while (dashboardLog.children.length > 5) {
+
+        // Keep only last 10 entries for dashboard
+        while (dashboardLog.children.length > 10) {
             dashboardLog.removeChild(dashboardLog.lastChild);
         }
     }
