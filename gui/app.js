@@ -163,9 +163,12 @@ async function loadInstallStateIntoApp() {
             }
             // Restore initialized flag — if ~/.kjer/initialized exists the user has
             // already completed setup; don't show first-time screens again.
-            if (initialized) {
+            // If the flag is absent (reset/uninstall), clear any stale localStorage value.
+            if (initialized === true) {
                 localStorage.setItem('kterInitialized', 'true');
                 logActivity('Initialization state restored from disk', 'info');
+            } else if (initialized === false) {
+                localStorage.removeItem('kterInitialized');
             }
         }
     } catch (e) {
@@ -1446,6 +1449,11 @@ const SecurityMonitor = {
         const logEntries = document.getElementById('logEntries');
         if (!logEntries) return;
 
+        if (this.entries.length === 0) {
+            logEntries.innerHTML = '<div style="text-align:center;color:#555;padding:32px 0;font-size:13px;">Run a Security Scan or Smart Defense to see activity here.</div>';
+            return;
+        }
+
         logEntries.innerHTML = this.entries.map(entry => {
             if (entry.type === 'divider') {
                 return `<div class="log-entry log-divider">
@@ -1977,6 +1985,8 @@ function initializeDashboard() {
 
         // Render activity log
         ActivityLog.render();
+        // Show empty-state placeholder in security monitor
+        SecurityMonitor.render();
         
         return;
     }
@@ -2004,6 +2014,8 @@ function initializeDashboard() {
     
     // Render activity log
     ActivityLog.render();
+    // Show empty-state placeholder in security monitor (real entries added during scan/defend)
+    SecurityMonitor.render();
     
     logActivity(`Security framework active for: ${installedDistro}`);
 }
