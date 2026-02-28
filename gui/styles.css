@@ -567,8 +567,7 @@ body {
 .card p {
     font-size: 16px;
     line-height: 1.6;
-    color: #FFFFFF;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    color: #333;
 }
 
 .card:hover {
@@ -581,16 +580,16 @@ body {
 .card h4,
 .card h5,
 .card h6 {
-    color: #FFFFFF;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    color: #9D4EDD;
+    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
 }
 
 .card .small {
-    color: rgba(255, 255, 255, 0.85);
+    color: #333;
 }
 
 .card span {
-    color: #FFFFFF;
+    color: #333;
 }
 
 .card.full-width {
@@ -696,7 +695,8 @@ body {
 
 .activity-header h3 {
     margin: 0;
-    color: #FFFFFF;
+    color: #9D4EDD;
+    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
     flex: 1;
     text-align: center;
     text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
@@ -973,9 +973,8 @@ body {
     font-size: 24px;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    /* Container Title Style 1 */
     color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
     font-family: var(--font-header);
 }
 
@@ -996,14 +995,14 @@ body {
 .tool-description {
     font-size: 16px;
     line-height: 1.7;
-    color: var(--color-text-light);
+    color: #333;
     margin-bottom: var(--spacing-md);
     min-height: 40px;
 }
 
 .tool-status {
     font-size: 12px;
-    color: var(--color-text-light);
+    color: #555;
     margin-bottom: var(--spacing-md);
 }
 
@@ -1125,15 +1124,15 @@ body {
     font-size: 18px;
     font-weight: 600;
     margin-bottom: var(--spacing-md);
-    color: #FFFFFF;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    color: #9D4EDD;
+    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
     font-family: var(--font-header);
 }
 
 .profile-description {
     font-size: 15px;
     line-height: 1.6;
-    color: rgba(255, 255, 255, 0.88);
+    color: #333;
     margin-bottom: var(--spacing-md);
 }
 
@@ -1166,8 +1165,8 @@ body {
 .status-section h3,
 .log-section h3 {
     text-align: center;
-    color: #FFFFFF;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    color: #9D4EDD;
+    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
     margin-bottom: var(--spacing-lg);
     font-family: var(--font-header);
 }
@@ -1189,7 +1188,7 @@ body {
     font-size: 13px;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    color: var(--color-text-dark);
+    color: #333;
 }
 
 .progress-bar {
@@ -1209,7 +1208,7 @@ body {
 .metric-value {
     font-size: 14px;
     font-weight: 600;
-    color: var(--color-text-dark);
+    color: #333;
     text-shadow: none;
 }
 
@@ -1294,8 +1293,8 @@ body {
 
 .settings-section h3 {
     text-align: center;
-    color: #FFFFFF;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.35);
+    color: #9D4EDD;
+    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
     margin-bottom: var(--spacing-lg);
     font-family: var(--font-header);
 }
@@ -1308,7 +1307,7 @@ body {
     display: block;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    color: var(--color-text-dark);
+    color: #333;
     cursor: pointer;
 }
 
@@ -1321,7 +1320,7 @@ body {
 .form-group small {
     display: block;
     margin-top: var(--spacing-xs);
-    color: var(--color-text-light);
+    color: #555;
     font-size: 12px;
 }
 
@@ -1488,7 +1487,7 @@ body {
     padding: var(--spacing-lg);
     text-align: center;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    color: #333;
     box-shadow: 0 -2px 12px rgba(157, 78, 221, 0.15);
 }
 
@@ -1511,7 +1510,7 @@ body {
     background: rgba(157, 78, 221, 0.30);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    color: #FFFFFF;
+    color: #333;
     padding: var(--spacing-lg);
     border-radius: var(--border-radius);
     box-shadow: 0 4px 20px rgba(157, 78, 221, 0.30);
@@ -1828,13 +1827,39 @@ body.dark-mode .logo-version {
 
 body.dark-mode .tab-content h2,
 body.dark-mode .tab-content h3 {
-    color: #FFFFFF;
+    color: #9D4EDD;
+    text-shadow: 0 0 10px rgba(255,255,255,0.4), 0 0 20px rgba(157,78,221,0.5);
 }
 
 body.dark-mode .card p,
 body.dark-mode .card .small,
 body.dark-mode .card span {
-    color: #FFFFFF;
+    color: #DDDDDD;
+}
+
+body.dark-mode .tool-description,
+body.dark-mode .tool-status {
+    color: #CCCCCC;
+}
+
+body.dark-mode .metric-label {
+    color: #DDDDDD;
+}
+
+body.dark-mode .form-group label {
+    color: #EEEEEE;
+}
+
+body.dark-mode .form-group small {
+    color: #BBBBBB;
+}
+
+body.dark-mode .footer {
+    color: rgba(255, 255, 255, 0.80);
+}
+
+body.dark-mode .notification {
+    color: #EEEEEE;
 }
 
 body.dark-mode .profile-description,
@@ -1872,7 +1897,7 @@ body.dark-mode .log-col-message {
 }
 
 body.dark-mode .metric-label {
-    color: #B0E0E6;
+    color: #DDDDDD;
 }
 
 body.dark-mode .filter-btn {
