@@ -34,7 +34,7 @@
 /* Page Header Style */
 .page-header {
     text-align: center;
-    color: #FFFFFF;
+    color: #1a1a1a;
     font-size: 28px;
     margin-bottom: 24px;
     letter-spacing: 1px;
@@ -395,7 +395,7 @@ body {
 
 .logo-version {
     font-size: 10px;
-    color: var(--color-text-dark);
+    color: #1a1a1a;
     font-family: "Tomorrow", monospace;
     font-weight: 300;
     letter-spacing: 0.5px;
@@ -567,7 +567,7 @@ body {
 .card p {
     font-size: 16px;
     line-height: 1.6;
-    color: #FFFFFF;
+    color: #1a1a1a;
 }
 
 .card:hover {
@@ -585,11 +585,11 @@ body {
 }
 
 .card .small {
-    color: #FFFFFF;
+    color: #555;
 }
 
 .card span {
-    color: #FFFFFF;
+    color: #1a1a1a;
 }
 
 .card.full-width {
@@ -995,14 +995,14 @@ body {
 .tool-description {
     font-size: 16px;
     line-height: 1.7;
-    color: #FFFFFF;
+    color: #1a1a1a;
     margin-bottom: var(--spacing-md);
     min-height: 40px;
 }
 
 .tool-status {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.75);
+    color: #555;
     margin-bottom: var(--spacing-md);
 }
 
@@ -1132,7 +1132,7 @@ body {
 .profile-description {
     font-size: 15px;
     line-height: 1.6;
-    color: #FFFFFF;
+    color: #1a1a1a;
     margin-bottom: var(--spacing-md);
 }
 
@@ -1188,7 +1188,7 @@ body {
     font-size: 13px;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    color: #FFFFFF;
+    color: #1a1a1a;
 }
 
 .progress-bar {
@@ -1208,7 +1208,7 @@ body {
 .metric-value {
     font-size: 14px;
     font-weight: 600;
-    color: #FFFFFF;
+    color: #1a1a1a;
     text-shadow: none;
 }
 
@@ -1307,7 +1307,7 @@ body {
     display: block;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    color: #FFFFFF;
+    color: #1a1a1a;
     cursor: pointer;
 }
 
@@ -1320,7 +1320,7 @@ body {
 .form-group small {
     display: block;
     margin-top: var(--spacing-xs);
-    color: rgba(255, 255, 255, 0.75);
+    color: #555;
     font-size: 12px;
 }
 
@@ -1487,7 +1487,7 @@ body {
     padding: var(--spacing-lg);
     text-align: center;
     font-size: 12px;
-    color: #FFFFFF;
+    color: #1a1a1a;
     box-shadow: 0 -2px 12px rgba(157, 78, 221, 0.15);
 }
 
@@ -1510,7 +1510,7 @@ body {
     background: rgba(176, 224, 230, 0.30);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    color: #FFFFFF;
+    color: #1a1a1a;
     padding: var(--spacing-lg);
     border-radius: var(--border-radius);
     box-shadow: 0 4px 20px rgba(157, 78, 221, 0.30);
