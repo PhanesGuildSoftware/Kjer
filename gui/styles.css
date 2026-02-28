@@ -332,7 +332,7 @@ html, body {
 
 body {
     font-family: var(--font-body);
-    background: #0a172e;
+    background: #333333;
     color: #FFFFFF;
     line-height: 1.6;
     transition: var(--transition);
