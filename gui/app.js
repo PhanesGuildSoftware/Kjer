@@ -1957,6 +1957,49 @@ function updateSettingsSystemInfo() {
         : 0;
     const toolsEl = document.getElementById('sysInfoToolCount');
     if (toolsEl) toolsEl.textContent = toolCount > 0 ? String(toolCount) : '—';
+
+    // Disk storage — read from cached system_analysis.json, fall back to Storage API
+    updateStorageInfo();
+}
+
+async function updateStorageInfo() {
+    let totalGb = null, availGb = null;
+
+    // Primary: system_analysis.json written by the CLI
+    try {
+        const r = await window.electronAPI?.readSystemAnalysis?.();
+        if (r?.success && r.data) {
+            if (r.data.total_disk_gb != null) totalGb = r.data.total_disk_gb;
+            if (r.data.avail_disk_gb != null) availGb = r.data.avail_disk_gb;
+        }
+    } catch (_) {}
+
+    // Fallback: browser Storage API (gives app-visible quota, not full disk)
+    if (totalGb == null || availGb == null) {
+        try {
+            const est = await navigator.storage?.estimate?.();
+            if (est) {
+                const toGb = b => (b / 1073741824).toFixed(1) + ' GB';
+                if (totalGb == null && est.quota)  totalGb = parseFloat((est.quota  / 1073741824).toFixed(1));
+                if (availGb == null && est.quota && est.usage != null)
+                    availGb = parseFloat(((est.quota - est.usage) / 1073741824).toFixed(1));
+            }
+        } catch (_) {}
+    }
+
+    const fmt = v => v != null ? v.toFixed(1) + ' GB' : '—';
+
+    // Dashboard card
+    const dashAvail = document.getElementById('dashStorageAvail');
+    const dashTotal = document.getElementById('dashStorageTotal');
+    if (dashAvail) dashAvail.textContent = fmt(availGb);
+    if (dashTotal) dashTotal.textContent = fmt(totalGb);
+
+    // Settings table
+    const sysTotal = document.getElementById('sysInfoDiskTotal');
+    const sysAvail = document.getElementById('sysInfoDiskAvail');
+    if (sysTotal) sysTotal.textContent = fmt(totalGb);
+    if (sysAvail) sysAvail.textContent = fmt(availGb);
 }
 
 // ==================== DASHBOARD FUNCTIONS ====================
@@ -1993,7 +2036,9 @@ function initializeDashboard() {
         ActivityLog.render();
         // Show empty-state placeholder in security monitor
         SecurityMonitor.render();
-        
+        // Storage info is available even before initialization
+        updateStorageInfo();
+
         return;
     }
 
@@ -2022,6 +2067,8 @@ function initializeDashboard() {
     ActivityLog.render();
     // Show empty-state placeholder in security monitor (real entries added during scan/defend)
     SecurityMonitor.render();
+    // Storage info
+    updateStorageInfo();
     
     logActivity(`Security framework active for: ${installedDistro}`);
 }
