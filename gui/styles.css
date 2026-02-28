@@ -1737,32 +1737,6 @@ body {
     justify-content: flex-end;
 }
 
-/* ── Sidebar Upgrade Button ──────────────────────────────────────── */
-.sidebar-upgrade-btn {
-    display: block;
-    width: calc(100% - 24px);
-    margin: 4px 12px 6px;
-    padding: 5px 0;
-    background: transparent;
-    border: 1px solid rgba(157,78,221,0.45);
-    border-radius: 6px;
-    color: #9D4EDD;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    text-align: center;
-    transition: background 0.18s, border-color 0.18s, color 0.18s;
-}
-.sidebar-upgrade-btn:hover {
-    background: rgba(157,78,221,0.18);
-    border-color: #9D4EDD;
-    color: #c77dff;
-}
-.sidebar-upgrade-btn:active {
-    background: rgba(157,78,221,0.32);
-}
-
 /* ── Report Wizard ─────────────────────────────────────────────────── */
 .report-check-row,
 .report-radio-row {
