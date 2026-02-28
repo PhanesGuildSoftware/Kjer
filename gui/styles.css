@@ -349,10 +349,10 @@ body::after {
     content: '';
     position: fixed;
     top: 50%;
-    left: calc(50% + 40px);
+    left: calc(50% + 70px);
     transform: translate(-50%, -50%);
-    width: 420px;
-    height: 420px;
+    width: 560px;
+    height: 560px;
     background-image: url('kjer_logo.PNG');
     background-size: contain;
     background-repeat: no-repeat;
