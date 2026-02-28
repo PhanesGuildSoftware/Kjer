@@ -400,15 +400,15 @@ async function initializeKjer() {
     // Enable OS-specific tool monitoring and security profiles
     if (installedOS === 'linux') {
         logActivity('Linux environment confirmed — enhanced Linux security profiles activated', 'success');
-        logActivity('Tool monitoring enabled: Fail2ban, UFW, ClamAV, Lynis, AIDE, Auditd, AppArmor', 'info');
     } else if (installedOS === 'macos') {
         logActivity('macOS environment confirmed — macOS security profiles activated', 'success');
-        logActivity('Tool monitoring enabled: Malwarebytes, Kaspersky Endpoint Security, Ghidra', 'info');
     } else if (installedOS === 'windows') {
         logActivity('Windows environment confirmed — Windows-optimized security suite activated', 'success');
-        logActivity('Tool monitoring enabled: Windows Defender, CIS-CAT Pro, OSQuery', 'info');
     }
-    
+
+    // Detect and register pre-installed tools — must run before CLI integration
+    await syncPreInstalledTools(installedOS);
+
     // Auto-register the 'kjer' CLI command on the host system
     await setupCLIIntegration(installedOS);
 
@@ -1587,6 +1587,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             setupEventListeners();
             logActivity('Event listeners attached', 'success');
             logActivity('Application ready for operations', 'success');
+
+            // Sync any pre-installed tools detected by the CLI into the toolbox
+            syncPreInstalledTools(savedOS || 'linux').catch(() => {});
         } else {
             // First time user - clear containers and require initialization
             clearApplicationContainers();
@@ -3609,6 +3612,76 @@ function toggleToolDetails(elementId, link) {
 }
 
 // ==================== TOOL STATE & DEPENDENCY MANAGEMENT ====================
+
+/**
+ * Read the system_analysis.json produced by the CLI, map YAML tool keys to
+ * TOOLS_DATABASE display names, and register any detected-installed tools into
+ * localStorage.installedTools so the Toolbox shows them as "Installed".
+ *
+ * Also runs a fresh `--analyze` pass via the CLI when no analysis file exists yet
+ * (e.g. first time after initialization).
+ */
+async function syncPreInstalledTools(osName) {
+    // Build lowercase-key → display-name lookup from TOOLS_DATABASE
+    const keyToName = {};
+    for (const [key, tool] of Object.entries(TOOLS_DATABASE)) {
+        keyToName[key.toLowerCase()] = tool.name;
+    }
+
+    // Try to read cached analysis first
+    let analysisData = null;
+    try {
+        const result = await window.electronAPI?.readSystemAnalysis?.();
+        if (result?.success && result.data?.detected_tools) {
+            analysisData = result.data;
+        }
+    } catch (_) {}
+
+    // If no cached analysis, run the CLI to generate one
+    if (!analysisData && osName !== 'windows') {
+        try {
+            const appPath = await window.electronAPI?.getAppPath?.();
+            if (appPath) {
+                logActivity('Running system tool detection…', 'info');
+                await window.electronAPI.executeCommand('bash', [
+                    '-c',
+                    `cd "${appPath}" && python3 scripts/kjer-cli.py --analyze 2>/dev/null || true`
+                ]);
+                // Read the freshly written file
+                const result2 = await window.electronAPI?.readSystemAnalysis?.();
+                if (result2?.success && result2.data?.detected_tools) {
+                    analysisData = result2.data;
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (!analysisData?.detected_tools) {
+        logActivity('Tool detection skipped — analysis data unavailable', 'info');
+        return;
+    }
+
+    const detected = analysisData.detected_tools;
+    const pre = [];
+    for (const [yamlKey, info] of Object.entries(detected)) {
+        if (!info?.installed) continue;
+        const displayName = keyToName[yamlKey.toLowerCase()];
+        if (displayName) {
+            setToolInstalled(displayName, true);
+            pre.push(displayName);
+        }
+    }
+
+    if (pre.length > 0) {
+        logActivity(`Pre-installed tools detected and registered: ${pre.join(', ')}`, 'success', '', true);
+    } else {
+        logActivity('Tool detection complete — no toolbox binaries found pre-installed', 'info');
+    }
+
+    // Always re-render the toolbox so status badges update immediately
+    renderToolsList?.();
+    updateSystemStatus?.();
+}
 
 function getInstalledTools() {
     const installed = localStorage.getItem('installedTools');

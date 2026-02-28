@@ -67,6 +67,17 @@ ipcMain.handle('read-install-state', async () => {
   }
 });
 
+// IPC: read ~/.kjer/system_analysis.json — written by the CLI's SystemAnalyzer
+ipcMain.handle('read-system-analysis', async () => {
+  const analysisFile = path.join(os.homedir(), '.kjer', 'system_analysis.json');
+  try {
+    const raw = fs.readFileSync(analysisFile, 'utf8');
+    return { success: true, data: JSON.parse(raw) };
+  } catch (e) {
+    return { success: false, data: null, error: e.message };
+  }
+});
+
 // IPC: write (or update) ~/.kjer/install_state.json  (used by Windows installer path)
 ipcMain.handle('write-install-state', async (event, state) => {
   try {

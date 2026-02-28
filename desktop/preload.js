@@ -43,4 +43,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     writeInstallState: (state) =>
         ipcRenderer.invoke('write-install-state', state),
+
+    /**
+     * Read ~/.kjer/system_analysis.json written by `kjer-cli.py --analyze`.
+     * Returns { success, data: { detected_tools: {name: {installed,path,version}}, ...} | null }
+     * @returns {Promise<{success:boolean, data:object|null}>}
+     */
+    readSystemAnalysis: () =>
+        ipcRenderer.invoke('read-system-analysis'),
 });
