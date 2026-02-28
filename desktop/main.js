@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, MenuItem } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
@@ -18,6 +18,48 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, '../gui/index.html'));
+
+  // Right-click context menu
+  win.webContents.on('context-menu', (event, params) => {
+    const menu = new Menu();
+
+    // Text editing actions — only shown when relevant
+    if (params.isEditable) {
+      menu.append(new MenuItem({ role: 'cut',   label: 'Cut' }));
+      menu.append(new MenuItem({ role: 'copy',  label: 'Copy' }));
+      menu.append(new MenuItem({ role: 'paste', label: 'Paste' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ role: 'selectAll', label: 'Select All' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+    } else if (params.selectionText) {
+      menu.append(new MenuItem({ role: 'copy', label: 'Copy' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+    }
+
+    // Link actions
+    if (params.linkURL) {
+      menu.append(new MenuItem({
+        label: 'Copy Link',
+        click: () => win.webContents.clipboard?.writeText(params.linkURL)
+             || require('electron').clipboard.writeText(params.linkURL),
+      }));
+      menu.append(new MenuItem({ type: 'separator' }));
+    }
+
+    // Dev tools (always available for debugging)
+    menu.append(new MenuItem({
+      label: 'Inspect Element',
+      click: () => win.webContents.inspectElement(params.x, params.y),
+    }));
+    menu.append(new MenuItem({
+      label: win.webContents.isDevToolsOpened() ? 'Close Dev Tools' : 'Open Dev Tools',
+      click: () => win.webContents.isDevToolsOpened()
+        ? win.webContents.closeDevTools()
+        : win.webContents.openDevTools(),
+    }));
+
+    if (menu.items.length > 0) menu.popup({ window: win });
+  });
 }
 
 // IPC: run a system command and return { stdout, stderr, code }
