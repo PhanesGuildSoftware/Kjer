@@ -984,12 +984,13 @@ body {
     justify-content: center;
     font-size: 11px;
     padding: var(--spacing-xs) var(--spacing-md);
-    background-color: rgba(176, 224, 230, 0.15);
-    color: #B0E0E6;
+    background-color: rgba(157, 78, 221, 0.18);
+    color: #9D4EDD;
+    border: 1px solid rgba(157, 78, 221, 0.35);
     border-radius: 12px;
     margin-bottom: var(--spacing-md);
     text-transform: uppercase;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .tool-description {
@@ -1008,17 +1009,19 @@ body {
 
 .read-more-link {
     display: inline-block;
-    color: #B0E0E6;
+    color: #9D4EDD;
     font-size: 14px;
     cursor: pointer;
     margin-top: var(--spacing-sm);
     transition: var(--transition);
-    font-weight: 500;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: rgba(157, 78, 221, 0.4);
 }
 
 .read-more-link:hover {
-    color: #B0E0E6;
-    text-decoration: underline;
+    color: #7B2FBE;
+    text-decoration-color: #7B2FBE;
 }
 
 .tool-actions {
@@ -1872,6 +1875,21 @@ body.dark-mode .btn-outline {
 
 body.dark-mode .btn-outline:hover:not(:disabled) {
     background-color: rgba(176, 224, 230, 0.1);
+}
+
+body.dark-mode .tool-category {
+    background-color: rgba(157, 78, 221, 0.30);
+    color: #E0B8FF;
+    border-color: rgba(157, 78, 221, 0.55);
+}
+
+body.dark-mode .read-more-link {
+    color: #c77dff;
+    text-decoration-color: rgba(199, 125, 255, 0.5);
+}
+
+body.dark-mode .read-more-link:hover {
+    color: #e0b8ff;
 }
 
 body.dark-mode .log-col-time,
