@@ -332,11 +332,30 @@ html, body {
 
 body {
     font-family: var(--font-body);
-    background: linear-gradient(180deg, #4a1f6b 0%, #B0E0E6 100%);
+    background: #0a172e;
     color: #FFFFFF;
     line-height: 1.6;
     transition: var(--transition);
     font-size: 18px;
+    position: relative;
+}
+
+/* Floating logo watermark centered in the background */
+body::after {
+    content: '';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 320px;
+    height: 320px;
+    background-image: url('kjer_logo.PNG');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.05;
+    z-index: 0;
+    pointer-events: none;
 }
 
 .container {
@@ -344,6 +363,8 @@ body {
     flex-direction: column;
     height: 100vh;
     background-color: transparent;
+    position: relative;
+    z-index: 1;
 }
 
 /* ==================== LOGO IN SIDEBAR ==================== */
