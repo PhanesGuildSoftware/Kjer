@@ -1965,24 +1965,22 @@ function updateSettingsSystemInfo() {
 async function updateStorageInfo() {
     let totalGb = null, availGb = null;
 
-    // Primary: system_analysis.json written by the CLI
+    // Primary: ask main process directly via df/wmic — always accurate, no file dep
     try {
-        const r = await window.electronAPI?.readSystemAnalysis?.();
-        if (r?.success && r.data) {
-            if (r.data.total_disk_gb != null) totalGb = r.data.total_disk_gb;
-            if (r.data.avail_disk_gb != null) availGb = r.data.avail_disk_gb;
+        const r = await window.electronAPI?.getDiskInfo?.();
+        if (r?.success) {
+            totalGb = r.total_disk_gb;
+            availGb = r.avail_disk_gb;
         }
     } catch (_) {}
 
-    // Fallback: browser Storage API (gives app-visible quota, not full disk)
+    // Secondary: system_analysis.json (CLI --analyze output) fills any gaps
     if (totalGb == null || availGb == null) {
         try {
-            const est = await navigator.storage?.estimate?.();
-            if (est) {
-                const toGb = b => (b / 1073741824).toFixed(1) + ' GB';
-                if (totalGb == null && est.quota)  totalGb = parseFloat((est.quota  / 1073741824).toFixed(1));
-                if (availGb == null && est.quota && est.usage != null)
-                    availGb = parseFloat(((est.quota - est.usage) / 1073741824).toFixed(1));
+            const r = await window.electronAPI?.readSystemAnalysis?.();
+            if (r?.success && r.data) {
+                if (totalGb == null && r.data.total_disk_gb != null) totalGb = r.data.total_disk_gb;
+                if (availGb == null && r.data.avail_disk_gb != null) availGb = r.data.avail_disk_gb;
             }
         } catch (_) {}
     }

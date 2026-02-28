@@ -120,6 +120,43 @@ ipcMain.handle('read-system-analysis', async () => {
   }
 });
 
+// IPC: get real disk usage for the root/system drive using df (Linux/macOS) or wmic (Windows)
+ipcMain.handle('get-disk-info', async () => {
+  return new Promise((resolve) => {
+    const isWin = process.platform === 'win32';
+    const cmd   = isWin
+      ? 'wmic logicaldisk where DeviceID="C:" get Size,FreeSpace /format:value'
+      : 'df -k /';
+    exec(cmd, { timeout: 8000 }, (error, stdout) => {
+      if (error || !stdout) return resolve({ success: false });
+      try {
+        if (isWin) {
+          const free  = parseInt((stdout.match(/FreeSpace=(\d+)/) || [])[1] || '0');
+          const total = parseInt((stdout.match(/Size=(\d+)/)      || [])[1] || '0');
+          resolve({
+            success: true,
+            total_disk_gb: parseFloat((total / 1e9).toFixed(2)),
+            avail_disk_gb: parseFloat((free  / 1e9).toFixed(2)),
+          });
+        } else {
+          // df -k /  output (last non-empty line): Filesystem 1K-blocks Used Available Use% Mount
+          const lines = stdout.trim().split('\n').filter(Boolean);
+          const parts = lines[lines.length - 1].trim().split(/\s+/);
+          const totalBytes = parseInt(parts[1]) * 1024;
+          const availBytes = parseInt(parts[3]) * 1024;
+          resolve({
+            success: true,
+            total_disk_gb: parseFloat((totalBytes / 1e9).toFixed(2)),
+            avail_disk_gb: parseFloat((availBytes / 1e9).toFixed(2)),
+          });
+        }
+      } catch (e) {
+        resolve({ success: false, error: e.message });
+      }
+    });
+  });
+});
+
 // IPC: write (or update) ~/.kjer/install_state.json  (used by Windows installer path)
 ipcMain.handle('write-install-state', async (event, state) => {
   try {

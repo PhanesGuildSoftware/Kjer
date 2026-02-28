@@ -51,4 +51,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     readSystemAnalysis: () =>
         ipcRenderer.invoke('read-system-analysis'),
+
+    /**
+     * Get real disk usage for the root/system drive.
+     * Returns { success, total_disk_gb, avail_disk_gb }
+     */
+    getDiskInfo: () =>
+        ipcRenderer.invoke('get-disk-info'),
 });
