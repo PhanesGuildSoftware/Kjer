@@ -391,7 +391,7 @@ body::after {
 
 .logo-version {
     font-size: 10px;
-    color: rgba(176, 224, 230, 0.6);
+    color: #FFFFFF;
     font-family: "Tomorrow", monospace;
     font-weight: 300;
     letter-spacing: 0.5px;
