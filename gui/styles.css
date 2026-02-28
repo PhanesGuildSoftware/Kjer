@@ -336,7 +336,7 @@ html, body {
 
 body {
     font-family: var(--font-body);
-    background: linear-gradient(180deg, #ffffff 0%, #85C8D4 100%);
+    background: linear-gradient(180deg, #85C8D4 0%, #85C8D4 60%, #ffffff 100%);
     color: #1a1a1a;
     line-height: 1.6;
     transition: var(--transition);
