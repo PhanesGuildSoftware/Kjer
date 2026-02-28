@@ -3769,7 +3769,9 @@ async function syncPreInstalledTools(osName) {
     const detected = analysisData.detected_tools;
     const pre = [];
     for (const [yamlKey, info] of Object.entries(detected)) {
-        if (!info?.installed) continue;
+        // Presence in detected_tools means the tool was found on the system.
+        // The CLI sets 'path' on found tools; also accept 'installed: true' as explicit flag.
+        if (!info?.path && !info?.installed) continue;
         const displayName = keyToName[yamlKey.toLowerCase()];
         if (displayName) {
             setToolInstalled(displayName, true);

@@ -126,7 +126,7 @@ class SystemAnalyzer:
 					# Also try the tool name itself as binary fallback
 					path = _shutil.which(tname)
 				if path:
-					entry = {'binary': binary, 'path': path, 'category': cat}
+					entry = {'binary': binary, 'path': path, 'category': cat, 'installed': True}
 					# Try to get version string cheaply
 					for ver_flag in ('--version', '-V', '-v', 'version'):
 						try:
@@ -1966,7 +1966,7 @@ if __name__ == '__main__':
 			os._exit(0)
 
 		elif cmd in ('--analyze', '-a'):
-			_require_ready()
+			# System analysis is read-only — does not require prior initialization.
 			db = load_db()
 			run_system_analysis(db)
 			os._exit(0)
