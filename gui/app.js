@@ -365,7 +365,7 @@ const NetworkStatus = {
 
 async function initializeKjer() {
     logActivity('Beginning Kjer initialization...', 'info');
-
+    try {
     // OS was already detected at install time — read from install state / localStorage.
     // Initialization no longer performs OS detection; it enables tool monitoring and
     // management for the environment that was confirmed during installation.
@@ -419,9 +419,14 @@ async function initializeKjer() {
     setTimeout(() => {
         logActivity('Initialization complete — tools and profiles are fully operational', 'success');
         logActivity('Use the Tool Box to install, monitor, and manage security tools', 'info');
-        showNotification('Kjer initialized successfully! Visit the Tool Box to manage your security tools.');
-        switchTab('profiles');
+        showNotification('✓ Kjer initialized successfully!');
     }, 2000);
+
+    } catch (initErr) {
+        localStorage.removeItem('kterInitialized');
+        logActivity(`Initialization failed: ${initErr.message || initErr}`, 'error');
+        showNotification('✗ Initialization failed. Check the activity log for details.');
+    }
 }
 
 async function setupElectronDependencies(osName) {
@@ -825,6 +830,9 @@ async function performVersionUpgrade(version, githubToken) {
         if (parsed.success) {
             logActivity(`✓ ${parsed.message}`, 'success');
             localStorage.setItem('kterVersion', version);
+            // Update sidebar version display immediately
+            const sidebarVerEl = document.getElementById('sidebarVersion');
+            if (sidebarVerEl) sidebarVerEl.textContent = `v${version}`;
             return true;
         } else {
             logActivity(`✗ Upgrade: ${parsed.message}`, 'error');
@@ -3677,10 +3685,9 @@ function renderProfiles() {
     if (!profilesList) return;
     
     // Check if profiles feature is available in current version
-    const currentVersion = localStorage.getItem('currentVersion') || '1.0.0';
+    const currentVersion = localStorage.getItem('kterVersion') || '1.0.0';
     if (currentVersion === '1.0.0') {
-        // v1.0.0 users see this, but the upgrade modal will be triggered when they click the nav button
-        profilesList.innerHTML = '<p style="text-align: center; color: #B0E0E6; padding: 40px;">Profiles is a premium feature. Click the Profiles nav button to upgrade.</p>';
+        profilesList.innerHTML = '<p style="text-align: center; color: #B0E0E6; padding: 40px;">Profiles require an upgraded license. Use the ⬆ Upgrade button to unlock this feature.</p>';
         return;
     }
     
