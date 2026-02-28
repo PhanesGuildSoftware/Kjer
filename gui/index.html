@@ -184,7 +184,7 @@
                     <h2 class="page-header">Settings & Configuration</h2>
                     <div class="settings-section">
                         <h3>Upgrade Licence</h3>
-                        <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 14px;">Current Plan: <strong style="color: #9D4EDD;">[Free]</strong></p>
+                        <p style="color: #1a1a1a; margin-bottom: 15px; font-size: 14px;">Current Plan: <strong style="color: #9D4EDD;">[Free]</strong></p>
                         <button class="btn btn-primary" onclick="showUpgradeModal()" style="width: 100%; margin-bottom: 10px;"><i class="icon icon-premium"></i> View Plans & Upgrade</button>
                         <p style="color: #888; font-size: 12px; margin-top: 10px;">Unlock advanced tools and features with a paid license.</p>
                     </div>
@@ -273,7 +273,7 @@
                         </div>
                         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(176, 224, 230, 0.2); text-align: center;">
                             <h4 style="color: #9D4EDD; margin-bottom: 15px;">Download Configuration</h4>
-                            <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 14px;">Export your Kjer configuration for backup or deployment:</p>
+                            <p style="color: #1a1a1a; margin-bottom: 15px; font-size: 14px;">Export your Kjer configuration for backup or deployment:</p>
                             <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
                                 <button class="btn btn-primary" onclick="downloadConfiguration('json')" style="font-size: 12px;"><i class="icon icon-download"></i> JSON</button>
                                 <button class="btn btn-primary" onclick="downloadConfiguration('yaml')" style="font-size: 12px;"><i class="icon icon-download"></i> YAML</button>
@@ -284,10 +284,10 @@
 
                     <div class="card" style="text-align: center;">
                         <h3 class="container-title">Version & Upgrades</h3>
-                        <p style="color: #B0E0E6; margin: 15px 0 5px 0; font-size: 13px;">Current version: <strong id="currentVersionDisplay">—</strong></p>
+                        <p style="color: #1a1a1a; margin: 15px 0 5px 0; font-size: 13px;">Current version: <strong id="currentVersionDisplay">—</strong></p>
                         <p style="color: #9D4EDD; margin: 0 0 15px 0; font-size: 11px; font-weight: 600;" id="currentVersionType">—</p>
-                        <p style="color: #B0E0E6; margin: 15px 0 5px 0; font-size: 13px;">Accessible version: <strong id="accessibleVersionDisplay">—</strong></p>
-                        <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 12px;">Unlock more tools by upgrading</p>
+                        <p style="color: #1a1a1a; margin: 15px 0 5px 0; font-size: 13px;">Accessible version: <strong id="accessibleVersionDisplay">—</strong></p>
+                        <p style="color: #1a1a1a; margin-bottom: 15px; font-size: 12px;">Unlock more tools by upgrading</p>
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                             <input type="text" id="upgradeKeyInput" class="form-input" placeholder="KJER-UPGRADE-XXXX-XXXX-XXXX" maxlength="28" style="flex: 1; text-transform: uppercase; font-family: monospace;">
                             <button class="btn btn-primary" onclick="applyUpgradeKey()" style="flex: 0.5;">Apply</button>
@@ -297,7 +297,7 @@
 
                     <div class="card" style="text-align: center;">
                         <h3 class="container-title" style="color: #FF6B6B;">Reset Application</h3>
-                        <p style="color: #B0E0E6; margin-bottom: 15px; font-size: 13px;">Clear app state while keeping your license active on this system.</p>
+                        <p style="color: #1a1a1a; margin-bottom: 15px; font-size: 13px;">Clear app state while keeping your license active on this system.</p>
                         <button class="btn btn-primary" onclick="confirmResetApplication()" style="background-color: rgba(255, 107, 107, 0.3); border-color: #FF6B6B; color: #FF6B6B; display: block; margin: 0 auto;"><i class="icon icon-refresh"></i> Reset</button>
                     </div>
 
@@ -339,7 +339,7 @@
                 <button onclick="closeActivationModal()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Close">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="color: #B0E0E6; margin-bottom: 20px; text-align: center;">
+                <p style="color: #1a1a1a; margin-bottom: 20px; text-align: center;">
                     Enter your license key to activate or upgrade Kjer. Each license is bound to this machine.
                 </p>
                 <div class="form-group">
@@ -377,7 +377,7 @@
 
             <!-- Page 1: Content Selection -->
             <div id="reportPage1" class="modal-body">
-                <p style="color: #B0E0E6; margin-bottom: 18px; font-size: 13px;">Select the sections to include in your report:</p>
+                <p style="color: #1a1a1a; margin-bottom: 18px; font-size: 13px;">Select the sections to include in your report:</p>
                 <div style="display: flex; flex-direction: column; gap: 12px;">
                     <label class="report-check-row"><input type="checkbox" id="rpt_threats" checked>
                         <span><strong>Detected Threats &amp; Findings</strong><br><small>Critical, high, and medium findings from the last scan</small></span></label>
@@ -402,7 +402,7 @@
 
             <!-- Page 2: Format Selection -->
             <div id="reportPage2" class="modal-body" style="display: none;">
-                <p style="color: #B0E0E6; margin-bottom: 18px; font-size: 13px;">Choose the output format for your report:</p>
+                <p style="color: #1a1a1a; margin-bottom: 18px; font-size: 13px;">Choose the output format for your report:</p>
                 <div style="display: flex; flex-direction: column; gap: 14px;">
                     <label class="report-radio-row">
                         <input type="radio" name="reportFormat" value="txt" checked>
@@ -425,13 +425,13 @@
 
             <!-- Page 3: Save Location -->
             <div id="reportPage3" class="modal-body" style="display: none;">
-                <p style="color: #B0E0E6; margin-bottom: 18px; font-size: 13px;">Choose where to save the report:</p>
+                <p style="color: #1a1a1a; margin-bottom: 18px; font-size: 13px;">Choose where to save the report:</p>
                 <div class="form-group" style="margin-bottom: 16px;">
                     <label style="color: #9D4EDD; font-size: 13px;">Save Path</label>
                     <input type="text" id="reportSavePath" class="form-input" placeholder="~/Documents/kjer-report-2026-02-27.txt" style="font-family: monospace; font-size: 12px;">
                     <p style="color: #888; font-size: 11px; margin-top: 6px;">Leave blank to save to your Documents folder. Enter a full path to choose a custom location.</p>
                 </div>
-                <div id="reportSavePreview" style="background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.3); border-radius: 6px; padding: 12px; font-size: 12px; color: #B0E0E6;">
+                <div id="reportSavePreview" style="background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.3); border-radius: 6px; padding: 12px; font-size: 12px; color: #1a1a1a;">
                     <strong style="color: #9D4EDD;">Report summary:</strong>
                     <div id="reportPreviewText" style="margin-top: 8px; line-height: 1.8;"></div>
                 </div>

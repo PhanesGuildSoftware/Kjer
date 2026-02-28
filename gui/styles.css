@@ -1361,12 +1361,12 @@ body {
 
 .info-table td:first-child {
     font-weight: 600;
-    color: var(--color-text-dark);
+    color: #9D4EDD;
     width: 40%;
 }
 
 .info-table td:last-child {
-    color: var(--color-text-light);
+    color: #1a1a1a;
 }
 
 /* ==================== BUTTONS ==================== */
@@ -1881,6 +1881,14 @@ body.dark-mode .tool-category {
     background-color: rgba(157, 78, 221, 0.30);
     color: #E0B8FF;
     border-color: rgba(157, 78, 221, 0.55);
+}
+
+body.dark-mode .info-table td:first-child {
+    color: #c77dff;
+}
+
+body.dark-mode .info-table td:last-child {
+    color: #DDDDDD;
 }
 
 body.dark-mode .read-more-link {
