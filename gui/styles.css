@@ -351,15 +351,16 @@ body::after {
     top: 50%;
     left: calc(50% + 40px);
     transform: translate(-50%, -50%);
-    width: 320px;
-    height: 320px;
+    width: 420px;
+    height: 420px;
     background-image: url('kjer_logo.PNG');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    opacity: 0.18;
+    opacity: 0.32;
     z-index: 0;
     pointer-events: none;
+    filter: drop-shadow(0 4px 24px rgba(0,0,0,0.10));
 }
 
 .container {
