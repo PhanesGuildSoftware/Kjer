@@ -344,9 +344,8 @@ body {
     position: relative;
 }
 
-/* Floating logo watermark centered in the background */
-body::after {
-    content: '';
+/* Floating logo watermark — real element above gradient, below UI */
+#bgLogo {
     position: fixed;
     top: 50%;
     left: calc(50% + 70px);
@@ -358,7 +357,7 @@ body::after {
     background-repeat: no-repeat;
     background-position: center;
     opacity: 0.32;
-    z-index: 0;
+    z-index: 1;
     pointer-events: none;
     filter: drop-shadow(0 4px 24px rgba(0,0,0,0.10));
 }
@@ -369,7 +368,7 @@ body::after {
     height: 100vh;
     background-color: transparent;
     position: relative;
-    z-index: 1;
+    z-index: 2;
 }
 
 /* ==================== LOGO IN SIDEBAR ==================== */
