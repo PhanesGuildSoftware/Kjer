@@ -172,7 +172,10 @@
                         </div>
                     </div>
                     <div class="log-section">
-                        <h3>Recent Activity Log</h3>
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                            <h3 style="margin: 0;">Recent Activity Log</h3>
+                            <button class="btn-small" onclick="exportActivityLog()">Export Log</button>
+                        </div>
                         <div id="activityLog" class="log-container">
                             <!-- Activity log entries will be populated dynamically -->
                         </div>

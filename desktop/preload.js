@@ -58,4 +58,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     getDiskInfo: () =>
         ipcRenderer.invoke('get-disk-info'),
+
+    /**
+     * Save the activity log to ~/.kjer/logs/kjer-activity-<timestamp>.log
+     * @param {string} content - formatted log text
+     * @returns {Promise<{success:boolean, filePath:string}>}
+     */
+    saveActivityLog: (content) =>
+        ipcRenderer.invoke('save-activity-log', content),
+
+    /**
+     * Register a callback invoked by main when the app is about to quit.
+     * Use this to trigger auto-save of the activity log.
+     * @param {Function} callback
+     */
+    onBeforeQuit: (callback) =>
+        ipcRenderer.on('app-before-quit', callback),
 });

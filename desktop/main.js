@@ -173,7 +173,37 @@ ipcMain.handle('write-install-state', async (event, state) => {
   }
 });
 
+// IPC: save activity log to ~/.kjer/logs/
+ipcMain.handle('save-activity-log', async (event, content) => {
+  try {
+    const logsDir = path.join(os.homedir(), '.kjer', 'logs');
+    fs.mkdirSync(logsDir, { recursive: true });
+    const now = new Date();
+    const stamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const logFile = path.join(logsDir, `kjer-activity-${stamp}.log`);
+    fs.writeFileSync(logFile, content, 'utf8');
+    return { success: true, filePath: logFile };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 app.whenReady().then(createWindow);
+
+// Signal renderer to auto-save log before quitting
+let _autoSaveTriggered = false;
+app.on('before-quit', (e) => {
+  if (!_autoSaveTriggered) {
+    _autoSaveTriggered = true;
+    e.preventDefault();
+    const wins = BrowserWindow.getAllWindows();
+    if (wins.length > 0) {
+      wins[0].webContents.send('app-before-quit');
+    }
+    // Allow up to 1.5s for renderer to save, then force quit
+    setTimeout(() => app.quit(), 1500);
+  }
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

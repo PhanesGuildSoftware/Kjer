@@ -1411,6 +1411,36 @@ function logActivity(message, level = 'info', tool = '', important = false) {
     ActivityLog.add(message, level, tool, important);
 }
 
+// Export the activity log to a timestamped file in ~/.kjer/logs/
+// silent=true suppresses the success notification (used for auto-save on close)
+function exportActivityLog(silent = false) {
+    if (!window.electronAPI || typeof window.electronAPI.saveActivityLog !== 'function') {
+        if (!silent) showNotification('Log export not available in this environment.');
+        return;
+    }
+    const entries = ActivityLog.entries.slice().reverse(); // oldest first
+    const header = [
+        'Kjer Security Activity Log',
+        `Exported: ${new Date().toLocaleString()}`,
+        '='.repeat(60)
+    ].join('\n');
+    const body = entries.map(e => {
+        const lvl = e.level.toUpperCase().padEnd(8);
+        const tool = e.tool ? `[${e.tool}] ` : '';
+        return `[${e.time}] [${lvl}] ${tool}${e.message}`;
+    }).join('\n');
+    const content = header + '\n' + body;
+    window.electronAPI.saveActivityLog(content).then(result => {
+        if (!silent) {
+            if (result && result.success) {
+                showNotification(`Log saved: ${result.filePath}`);
+            } else {
+                showNotification('Failed to save log.');
+            }
+        }
+    }).catch(() => {});
+}
+
 // ==================== SECURITY MONITOR ====================
 // Real-time, per-tool-per-threat feed rendered to #logEntries
 // (Dashboard Security Activity Monitor). Receives all scan phase
@@ -1572,7 +1602,19 @@ const PROFILES_DATABASE = [
 document.addEventListener('DOMContentLoaded', async function() {
     loadSettings();
     NetworkStatus.init();
+
+    // Mark the start of this session in the activity log
+    const sessionStart = new Date().toLocaleString();
+    logActivity(`─── Session started: ${sessionStart} ───`, 'info', '', true);
     logActivity('System booting up...', 'info');
+
+    // Register auto-save: when main signals app is about to quit,
+    // silently write the activity log to ~/.kjer/logs/
+    if (window.electronAPI && window.electronAPI.onBeforeQuit) {
+        window.electronAPI.onBeforeQuit(() => {
+            exportActivityLog(true); // silent = no notification
+        });
+    }
 
     // Load OS from install_state.json (written by gdje-install.sh at install time).
     // This runs before any rendering so tools, profiles, and status all see the
