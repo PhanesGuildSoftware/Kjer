@@ -336,7 +336,7 @@ html, body {
 
 body {
     font-family: var(--font-body);
-    background: linear-gradient(180deg, #85C8D4 0%, #85C8D4 60%, #ffffff 100%);
+    background: #f0f0f0;
     color: #1a1a1a;
     line-height: 1.6;
     transition: var(--transition);
@@ -356,7 +356,7 @@ body {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    opacity: 0.32;
+    opacity: 0.28;
     z-index: 1;
     pointer-events: none;
     filter: drop-shadow(0 4px 24px rgba(0,0,0,0.10));
