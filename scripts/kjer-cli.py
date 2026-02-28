@@ -5,6 +5,9 @@ import sys
 import yaml
 import subprocess
 import json
+import re
+import shutil as _shutil
+import platform as _platform
 from pathlib import Path
 
 DB_PATH          = Path(__file__).resolve().parent.parent / 'db' / 'defensive-tools-db.yaml'
@@ -14,6 +17,247 @@ UPGRADE_MANAGER  = Path(__file__).resolve().parent.parent / 'lib' / 'upgrade_man
 INSTALL_ROOT     = Path(__file__).resolve().parent.parent
 INIT_FLAG        = Path.home() / '.kjer' / 'initialized'
 INSTALL_STATE    = Path.home() / '.kjer' / 'install_state.json'
+ANALYSIS_FILE    = Path.home() / '.kjer' / 'system_analysis.json'
+
+# ==================== SYSTEM ANALYSIS ====================
+
+class SystemAnalyzer:
+	"""Native system info + pre-installed tool detection — no backend required."""
+
+	@staticmethod
+	def collect():
+		"""Collect full system info using pure Python / /proc. Returns a dict."""
+		info = {}
+		sys_os = _platform.system().lower()
+
+		# ── OS / Distro ───────────────────────────────────────────────
+		if sys_os == 'linux':
+			try:
+				od = {}
+				with open('/etc/os-release') as f:
+					for line in f:
+						if '=' in line:
+							k, v = line.strip().split('=', 1)
+							od[k] = v.strip('"')
+				info['os']        = od.get('PRETTY_NAME', 'Linux')
+				info['distro_id'] = od.get('ID', 'linux').lower()
+			except Exception:
+				info['os'] = 'Linux'; info['distro_id'] = 'linux'
+		elif sys_os == 'darwin':
+			ver = _platform.mac_ver()[0]
+			info['os'] = f'macOS {ver}' if ver else 'macOS'
+			info['distro_id'] = 'macos'
+		else:
+			info['os'] = _platform.system(); info['distro_id'] = sys_os
+
+		# ── Kernel / Architecture ─────────────────────────────────────
+		info['kernel'] = _platform.release()
+		info['arch']   = _platform.machine()
+
+		# ── Package manager ───────────────────────────────────────────
+		for pm in ('apt', 'dnf', 'pacman', 'zypper', 'brew', 'apk'):
+			if _shutil.which(pm):
+				info['pkg_mgr'] = pm; break
+		else:
+			info['pkg_mgr'] = 'unknown'
+
+		# ── CPU ───────────────────────────────────────────────────────
+		try:
+			import multiprocessing
+			info['cpu_cores'] = multiprocessing.cpu_count()
+		except Exception:
+			info['cpu_cores'] = 'N/A'
+
+		# CPU model from /proc/cpuinfo when available
+		try:
+			with open('/proc/cpuinfo') as f:
+				for line in f:
+					if line.startswith('model name'):
+						info['cpu_model'] = line.split(':', 1)[1].strip()
+						break
+		except Exception:
+			pass
+
+		# ── RAM (/proc/meminfo) ───────────────────────────────────────
+		try:
+			mem = {}
+			with open('/proc/meminfo') as f:
+				for line in f:
+					m = re.match(r'(\w+):\s+(\d+)', line)
+					if m:
+						mem[m.group(1)] = int(m.group(2))
+			info['total_ram_mb'] = mem.get('MemTotal', 0) // 1024
+			info['avail_ram_mb'] = mem.get('MemAvailable', 0) // 1024
+			# Legacy keys for print_system_info compatibility
+			info['total_ram'] = info['total_ram_mb']
+			info['avail_ram'] = info['avail_ram_mb']
+		except Exception:
+			info['total_ram_mb'] = info['avail_ram_mb'] = 0
+			info['total_ram'] = info['avail_ram'] = 0
+
+		# ── Disk (/) ──────────────────────────────────────────────────
+		try:
+			st = os.statvfs('/')
+			info['total_disk_gb'] = round((st.f_blocks * st.f_frsize) / 1024**3, 2)
+			info['avail_disk_gb'] = round((st.f_bavail * st.f_frsize) / 1024**3, 2)
+			# Legacy keys
+			info['total_disk'] = info['total_disk_gb']
+			info['avail_disk'] = info['avail_disk_gb']
+		except Exception:
+			info['total_disk_gb'] = info['avail_disk_gb'] = 0
+			info['total_disk'] = info['avail_disk'] = 0
+
+		return info
+
+	@staticmethod
+	def detect_tools(db):
+		"""
+		Check every tool in the DB against the system PATH.
+		Returns dict: { tool_key: { binary, path, category, version } }
+		"""
+		detected = {}
+		for cat, tools in db.items():
+			if cat == 'profiles':
+				continue
+			for tname, tdata in tools.items():
+				binary = tdata.get('binary', tname)
+				path = _shutil.which(binary)
+				if not path:
+					# Also try the tool name itself as binary fallback
+					path = _shutil.which(tname)
+				if path:
+					entry = {'binary': binary, 'path': path, 'category': cat}
+					# Try to get version string cheaply
+					for ver_flag in ('--version', '-V', '-v', 'version'):
+						try:
+							r = subprocess.run(
+								[binary, ver_flag],
+								capture_output=True, text=True, timeout=3
+							)
+							out = (r.stdout or r.stderr or '').strip().splitlines()
+							if out:
+								entry['version'] = out[0][:80]
+								break
+						except Exception:
+							continue
+					detected[tname] = entry
+		return detected
+
+	@staticmethod
+	def compute_compat(tdata, sysinfo):
+		"""
+		Compatibility score 0–100 for a single tool entry.
+		  40 pts — package manager supported
+		  30 pts — RAM available vs required
+		  30 pts — architecture
+		"""
+		score = 0
+		pkg_mgr  = sysinfo.get('pkg_mgr', 'unknown')
+		packages = tdata.get('packages', {})
+		avail    = sysinfo.get('avail_ram_mb', 9999)
+		req      = tdata.get('metrics', {}).get('ram_required_mb', 0)
+		arch     = sysinfo.get('arch', 'x86_64').lower()
+
+		# Package manager support
+		if pkg_mgr in packages:
+			score += 40
+		elif packages:
+			score += 20   # has support for something, just not this PM
+
+		# RAM
+		if req == 0 or avail >= req * 2:
+			score += 30
+		elif avail >= req:
+			score += 20
+		elif avail >= req // 2:
+			score += 10
+
+		# Architecture
+		if arch in ('x86_64', 'amd64'):
+			score += 30
+		elif 'aarch64' in arch or 'arm64' in arch:
+			score += 25
+		elif 'arm' in arch:
+			score += 15
+		else:
+			score += 20
+
+		return min(score, 100)
+
+	@classmethod
+	def build_warnings(cls, sysinfo, detected, db):
+		"""
+		Return a list of (level, message) warning tuples based on system state.
+		level: 'critical' | 'warning' | 'info'
+		"""
+		warnings = []
+		avail_ram = sysinfo.get('avail_ram_mb', 9999)
+		total_ram = sysinfo.get('total_ram_mb', 9999)
+		avail_disk = sysinfo.get('avail_disk_gb', 999)
+		pkg_mgr = sysinfo.get('pkg_mgr', 'unknown')
+		arch = sysinfo.get('arch', 'x86_64').lower()
+
+		# RAM warnings
+		if avail_ram < 256:
+			warnings.append(('critical', f'Critically low available RAM ({avail_ram} MB). Most tools will fail to run.'))
+		elif avail_ram < 512:
+			warnings.append(('critical', f'Very low available RAM ({avail_ram} MB). ClamAV, AIDE, and heavy tools will fail.'))
+		elif avail_ram < 1024:
+			warnings.append(('warning', f'Low available RAM ({avail_ram} MB). Heavy tools (ClamAV, OpenVAS) may be slow.'))
+		if total_ram < 2048:
+			warnings.append(('warning', f'Total RAM is {total_ram} MB. Consider adding RAM for optimal security tool performance.'))
+
+		# Disk warnings
+		if avail_disk < 2:
+			warnings.append(('critical', f'Critically low disk space ({avail_disk} GB free). Tool installation will likely fail.'))
+		elif avail_disk < 5:
+			warnings.append(('warning', f'Low disk space ({avail_disk} GB free). Large tools (ClamAV, OSQuery) may fail to install.'))
+
+		# Package manager
+		if pkg_mgr == 'unknown':
+			warnings.append(('critical', 'No supported package manager found (apt/dnf/pacman/zypper). Cannot install tools automatically.'))
+
+		# Architecture
+		if 'arm' in arch and 'aarch64' not in arch and 'arm64' not in arch:
+			warnings.append(('warning', f'Architecture {sysinfo.get("arch")} has limited tool support. Some tools may not be available.'))
+
+		# High-RAM tools installed but RAM is tight
+		heavy_tools = {'clamav': 512, 'osquery': 256, 'aide': 256}
+		for tname, ram_needed in heavy_tools.items():
+			if tname in detected and avail_ram < ram_needed:
+				warnings.append(('warning', f'{tname} is installed but available RAM ({avail_ram} MB) is below its {ram_needed} MB requirement.'))
+
+		# Pre-installed tools detected — info
+		pre = len(detected)
+		if pre > 0:
+			tool_list = ', '.join(list(detected.keys())[:5])
+			suffix = f' (+{pre-5} more)' if pre > 5 else ''
+			warnings.append(('info', f'{pre} security tool(s) already installed on this system: {tool_list}{suffix}'))
+
+		return warnings
+
+	@classmethod
+	def save(cls, data):
+		"""Persist analysis to ~/.kjer/system_analysis.json"""
+		import datetime
+		try:
+			ANALYSIS_FILE.parent.mkdir(parents=True, exist_ok=True)
+			data['analyzed_at'] = datetime.datetime.now().isoformat()
+			ANALYSIS_FILE.write_text(json.dumps(data, indent=2))
+		except Exception:
+			pass
+
+	@classmethod
+	def load(cls):
+		"""Load cached analysis. Returns dict or None."""
+		try:
+			if ANALYSIS_FILE.exists():
+				return json.loads(ANALYSIS_FILE.read_text())
+		except Exception:
+			pass
+		return None
+
+
 
 # ==================== BACKEND API INTEGRATION ====================
 
@@ -187,25 +431,34 @@ def check_os_compatibility():
 	return True, detected_os, 'OS compatibility verified'
 
 def get_system_info():
-	"""Get system information from backend (post-initialization)"""
-	backend = BackendAPI()
-	system_status = backend.get_system_status()
-	
-	if system_status.get('success'):
-		return system_status.get('system_info', {})
-	
-	# Fallback to empty info if backend fails
+	"""
+	Get system information — native Python first, backend as fallback.
+	Always returns all expected keys so callers don't need to guard.
+	"""
+	# Always try native collection first (fast, no backend dep)
+	info = SystemAnalyzer.collect()
+	if info.get('os') and info.get('os') != 'N/A':
+		return info
+
+	# Fallback: backend (post-initialization only)
+	try:
+		backend = BackendAPI()
+		system_status = backend.get_system_status()
+		if system_status.get('success'):
+			bi = system_status.get('system_info', {})
+			if bi:
+				return bi
+	except Exception:
+		pass
+
+	# Last resort: empty structure
 	return {
-		'os': 'N/A',
-		'distro_id': 'N/A',
-		'kernel': 'N/A',
-		'arch': 'N/A',
-		'pkg_mgr': 'N/A',
-		'cpu_cores': 'N/A',
-		'total_ram': 'N/A',
-		'avail_ram': 'N/A',
-		'total_disk': 'N/A',
-		'avail_disk': 'N/A'
+		'os': 'N/A', 'distro_id': 'N/A', 'kernel': 'N/A', 'arch': 'N/A',
+		'pkg_mgr': 'N/A', 'cpu_cores': 'N/A',
+		'total_ram': 'N/A', 'avail_ram': 'N/A',
+		'total_ram_mb': 0,  'avail_ram_mb': 0,
+		'total_disk': 'N/A', 'avail_disk': 'N/A',
+		'total_disk_gb': 0,  'avail_disk_gb': 0,
 	}
 
 def _get_detected_os_label():
@@ -258,20 +511,34 @@ def print_banner():
 	print()
 
 def print_system_info():
-	"""Print system information section"""
+	"""Print system information section — native data with inline warnings."""
 	info = get_system_info()
-	
+
+	# ── Inline warning glyphs ──────────────────────────────────────────
+	ram_mb   = info.get('avail_ram_mb', 0)
+	disk_gb  = info.get('avail_disk_gb', 0)
+	ram_warn  = ''
+	disk_warn = ''
+	if   ram_mb < 256:  ram_warn  = '  \033[1;31m[CRITICAL — extremely low]\033[0m'
+	elif ram_mb < 512:  ram_warn  = '  \033[1;31m[CRITICAL — very low]\033[0m'
+	elif ram_mb < 1024: ram_warn  = '  \033[1;33m[WARNING — low]\033[0m'
+	elif ram_mb < 2048: ram_warn  = '  \033[1;33m[WARNING]\033[0m'
+	if   disk_gb < 2:   disk_warn = '  \033[1;31m[CRITICAL — very low]\033[0m'
+	elif disk_gb < 5:   disk_warn = '  \033[1;33m[WARNING — low]\033[0m'
+
 	print("\033[1;33m" + "="*70)
 	print("  SYSTEM INFORMATION")
 	print("="*70 + "\033[0m")
-	print(f"  \033[1;32mOS:\033[0m              {info['os']}")
-	print(f"  \033[1;32mDistro ID:\033[0m       {info['distro_id']}")
-	print(f"  \033[1;32mKernel:\033[0m          {info['kernel']}")
-	print(f"  \033[1;32mArchitecture:\033[0m    {info['arch']}")
-	print(f"  \033[1;32mPackage Mgr:\033[0m     {info['pkg_mgr']}")
-	print(f"  \033[1;32mCPU Cores:\033[0m       {info['cpu_cores']}")
-	print(f"  \033[1;32mTotal RAM:\033[0m       {info['total_ram']} MB ({info['avail_ram']} MB available)")
-	print(f"  \033[1;32mTotal Disk:\033[0m      {info['total_disk']} GB ({info['avail_disk']} GB available)")
+	print(f"  \033[1;32mOS:\033[0m              {info.get('os','N/A')}")
+	print(f"  \033[1;32mDistro ID:\033[0m       {info.get('distro_id','N/A')}")
+	print(f"  \033[1;32mKernel:\033[0m          {info.get('kernel','N/A')}")
+	print(f"  \033[1;32mArchitecture:\033[0m    {info.get('arch','N/A')}")
+	print(f"  \033[1;32mPackage Mgr:\033[0m     {info.get('pkg_mgr','N/A')}")
+	print(f"  \033[1;32mCPU Cores:\033[0m       {info.get('cpu_cores','N/A')}")
+	print(f"  \033[1;32mTotal RAM:\033[0m       {info.get('total_ram','N/A')} MB  "
+	      f"(available: {info.get('avail_ram','N/A')} MB){ram_warn}")
+	print(f"  \033[1;32mTotal Disk:\033[0m      {info.get('total_disk','N/A')} GB  "
+	      f"(available: {info.get('avail_disk','N/A')} GB){disk_warn}")
 	print("\033[1;33m" + "="*70 + "\033[0m")
 	print()
 
@@ -282,19 +549,142 @@ def print_header():
 	print_system_info()
 
 def list_tools(db):
-	"""Display all available tools by category"""
-	print("\n\033[1;36m" + "="*70)
-	print("  AVAILABLE TOOLS")
-	print("="*70 + "\033[0m")
+	"""Display all available tools — HakPak3-style compatibility table."""
+	info     = get_system_info()
+	detected = SystemAnalyzer.detect_tools(db)
+
+	# ── gather rows ───────────────────────────────────────────────────
+	rows = []
 	for cat, tools in db.items():
 		if cat == 'profiles':
 			continue
-		print(f"\n\033[1;35m[{cat.upper()}]\033[0m")
 		for tname, tdata in tools.items():
-			desc = tdata.get('description', 'No description')
-			binary = tdata.get('binary', 'N/A')
-			print(f"  \033[1;32m•\033[0m {tname:<20} - {desc}")
-			print(f"    \033[0;33mBinary:\033[0m {binary}")
+			compat   = SystemAnalyzer.compute_compat(tdata, info)
+			size_mb  = tdata.get('metrics', {}).get('estimated_size_mb', 0)
+			ram_mb   = tdata.get('metrics', {}).get('ram_required_mb', 0)
+			det      = detected.get(tname, {})
+			if det.get('installed'):
+				ver   = det.get('version', '')
+				vstxt = f'  ({ver})' if ver else ''
+				status_str = f'\033[1;32m✓ Installed{vstxt}\033[0m'
+			else:
+				status_str = '  Available'
+			rows.append((tname, compat, size_mb, ram_mb, status_str, tdata.get('description', ''), cat))
+
+	# ── sort: installed first, then by compat desc ────────────────────
+	rows.sort(key=lambda r: (0 if '✓' in r[4] else 1, -r[1]))
+
+	total       = len(rows)
+	n_installed = sum(1 for r in rows if '✓' in r[4])
+
+	W = 94  # total table width
+	print()
+	print("\033[1;33m" + "="*W)
+	print(f"  ALL TOOLS ({total})  —  ✓ = already installed on this system  |  detected: {n_installed}/{total}")
+	print("="*W + "\033[0m")
+	print(f"  {'Tool':<22} {'Compat':>6}  {'Size':>9}  {'RAM':>9}  {'Category':<12} {'Status':<24} Description")
+	print("\033[0;33m" + "-"*W + "\033[0m")
+
+	for tname, compat, size_mb, ram_mb, status_str, desc, cat in rows:
+		# Compat colour
+		if   compat >= 80: ccolor = '\033[1;32m'
+		elif compat >= 50: ccolor = '\033[1;33m'
+		else:              ccolor = '\033[1;31m'
+		compat_col = f'{ccolor}{compat:>3}%\033[0m'
+		size_col   = f'{size_mb:>7.1f} MB' if size_mb else '       N/A'
+		ram_col    = f'{ram_mb:>7} MB'     if ram_mb  else '       N/A'
+		# Truncate description
+		max_desc   = W - 22 - 6 - 9 - 9 - 12 - 20 - 16
+		desc_col   = desc[:max_desc] + '…' if len(desc) > max_desc else desc
+		# Strip ANSI to measure status string length for padding
+		plain_status = re.sub(r'\033\[[0-9;]*m', '', status_str)
+		pad          = max(0, 24 - len(plain_status))
+		print(f"  \033[1;36m{tname:<22}\033[0m {compat_col:>15}  {size_col}  {ram_col}  {cat:<12} {status_str}{' '*pad} {desc_col}")
+
+	print("\033[1;33m" + "="*W + "\033[0m")
+	print()
+
+
+def run_system_analysis(db):
+	"""Full system analysis — system info, warnings, tool compat table, save JSON."""
+	print()
+	print("\033[1;35m" + "╔" + "═"*68 + "╗")
+	print("║" + "  KJER SYSTEM ANALYSIS & COMPATIBILITY REPORT".center(68) + "║")
+	print("╚" + "═"*68 + "╝" + "\033[0m")
+	print()
+
+	# ── 1. Collect system info ─────────────────────────────────────────
+	print("\033[1;36m→ Collecting system information…\033[0m")
+	info = SystemAnalyzer.collect()
+
+	# ── 2. Detect pre-installed tools ─────────────────────────────────
+	print("\033[1;36m→ Scanning for pre-installed tools…\033[0m")
+	detected = SystemAnalyzer.detect_tools(db)
+
+	# ── 3. Build warnings ─────────────────────────────────────────────
+	warnings = SystemAnalyzer.build_warnings(info, detected, db)
+
+	# ── 4. Save results ───────────────────────────────────────────────
+	analysis = {
+		**info,
+		'detected_tools': detected,
+		'warnings':       [{'level': w[0], 'message': w[1]} for w in warnings],
+	}
+	SystemAnalyzer.save(analysis)
+
+	# ── Print system info block ────────────────────────────────────────
+	W = 70
+	print()
+	print("\033[1;33m" + "="*W)
+	print("  SYSTEM INFORMATION")
+	print("="*W + "\033[0m")
+	fields = [
+		('OS',           info.get('os','N/A')),
+		('Distro ID',    info.get('distro_id','N/A')),
+		('Kernel',       info.get('kernel','N/A')),
+		('Architecture', info.get('arch','N/A')),
+		('Package Mgr',  info.get('pkg_mgr','N/A')),
+		('CPU Cores',    info.get('cpu_cores','N/A')),
+		('Total RAM',    f"{info.get('total_ram','N/A')} MB  (available: {info.get('avail_ram','N/A')} MB)"),
+		('Total Disk',   f"{info.get('total_disk','N/A')} GB  (available: {info.get('avail_disk','N/A')} GB)"),
+	]
+	for label, val in fields:
+		print(f"  \033[1;32m{label:<14}\033[0m  {val}")
+
+	# ── Print warnings block ───────────────────────────────────────────
+	if warnings:
+		print()
+		print("\033[1;33m" + "="*W)
+		print("  WARNINGS & NOTICES")
+		print("="*W + "\033[0m")
+		level_order = {'critical': 0, 'warning': 1, 'info': 2}
+		for lvl, msg in sorted(warnings, key=lambda w: level_order.get(w[0], 9)):
+			if   lvl == 'critical': glyph = '\033[1;31m [CRITICAL]\033[0m'
+			elif lvl == 'warning':  glyph = '\033[1;33m [WARNING] \033[0m'
+			else:                   glyph = '\033[0;36m [INFO]    \033[0m'
+			print(f"  {glyph}  {msg}")
+
+	# ── Print tool compat table ────────────────────────────────────────
+	print()
+	list_tools(db)
+
+	# ── Print pre-installed summary ────────────────────────────────────
+	pre = [(tn, d) for tn, d in detected.items() if d.get('installed')]
+	if pre:
+		print("\033[1;33m" + "="*W)
+		print(f"  PRE-INSTALLED TOOLS DETECTED ON THIS SYSTEM ({len(pre)})")
+		print("="*W + "\033[0m")
+		for tn, d in sorted(pre):
+			ver   = d.get('version', '')
+			path  = d.get('path', '')
+			vstxt = f'  v{ver}' if ver else ''
+			print(f"  \033[1;32m✓\033[0m  {tn:<20}  {path}{vstxt}")
+		print()
+
+	print(f"\033[0;33m→ Analysis saved to {ANALYSIS_FILE}\033[0m")
+	print()
+
+
 
 def list_profiles(db):
 	"""Display installation profiles"""
@@ -558,16 +948,30 @@ def show_status():
 	if tools_result.get('success'):
 		installed = tools_result.get('tools', [])
 		if installed:
-			print(f"\n\033[1;32mInstalled Tools ({len(installed)}):\033[0m")
+			print(f"\n\033[1;32mInstalled Tools ({len(installed)}) — managed by Kjer:\033[0m")
 			for tool in installed:
-				# Could enhance with version info
 				print(f"  \033[1;32m•\033[0m {tool}")
 		else:
-			print("\n\033[0;33m  No tools currently installed.\033[0m")
+			print("\n\033[0;33m  No tools currently managed by Kjer.\033[0m")
 	else:
 		print(f"\n\033[1;31m✗ Error fetching installed tools\033[0m")
 		if tools_result.get('error'):
 			print(f"   {tools_result['error']}")
+
+	# ── Pre-installed tools (native detection) ────────────────────────
+	print(f"\n\033[1;36m→ Scanning for pre-installed tools…\033[0m")
+	db      = load_db()
+	detected = SystemAnalyzer.detect_tools(db)
+	pre     = [(tn, d) for tn, d in detected.items() if d.get('installed')]
+	if pre:
+		print(f"\n\033[1;32mPre-Installed Tools — detected on system, not managed by Kjer ({len(pre)}):\033[0m")
+		for tn, d in sorted(pre):
+			path = d.get('path', 'unknown')
+			ver  = d.get('version', '')
+			vstxt = f'  v{ver}' if ver else ''
+			print(f"  \033[1;32m✓\033[0m  {tn:<20}  {path}{vstxt}")
+	else:
+		print("\n\033[0;33m  No toolbox binaries found pre-installed on this system.\033[0m")
 
 def repo_management():
 	"""Repository management for APT"""
@@ -1151,6 +1555,7 @@ def print_help():
 	print("  \033[1;32m--upgrade,   -u\033[0m     Upgrade Kjer with a new license key")
 	print("  \033[1;32m--scan,      -S\033[0m     Run a security scan using installed tools")
 	print("  \033[1;32m--defend,    -D\033[0m     Activate defensive measures using installed tools")
+	print("  \033[1;32m--analyze,   -a\033[0m     Run full system analysis & compatibility report")
 	print("  \033[1;32m--uninstall\033[0m          Remove Kjer CLI integration from this system")
 	print("  \033[1;32m--version,   -v\033[0m     Show version information")
 	print("  \033[1;32m--help,      -h\033[0m     Show this help message")
@@ -1463,6 +1868,7 @@ def main_menu():
 		print("  \033[1;36m9)\033[0m Upgrade Kjer (Enter License Key)")
 		print("  \033[1;36m10)\033[0m Security Scan")
 		print("  \033[1;36m11)\033[0m Smart Defense")
+		print("  \033[1;36m12)\033[0m System Analysis & Compatibility Report")
 		print("  \033[1;31m0)\033[0m Exit")
 		print("\033[1;33m" + "="*70 + "\033[0m")
 		
@@ -1490,11 +1896,13 @@ def main_menu():
 			cli_scan()
 		elif choice == '11':
 			cli_defend()
+		elif choice == '12':
+			run_system_analysis(db)
 		elif choice == '0':
 			print("\n\033[1;32m✓ Exiting Kjer CLI. Goodbye!\033[0m\n")
 			os._exit(0)  # Use os._exit to avoid PyArmor cleanup issues
 		else:
-			print("\n\033[1;31m✗ Invalid option. Please select 0-11.\033[0m")
+			print("\n\033[1;31m✗ Invalid option. Please select 0-12.\033[0m")
 		
 		input("\n\033[0;33mPress Enter to continue...\033[0m")
 
@@ -1555,6 +1963,12 @@ if __name__ == '__main__':
 			_require_ready()
 			print_header()
 			cli_defend()
+			os._exit(0)
+
+		elif cmd in ('--analyze', '-a'):
+			_require_ready()
+			db = load_db()
+			run_system_analysis(db)
 			os._exit(0)
 
 		elif cmd == '--uninstall':
