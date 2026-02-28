@@ -102,14 +102,14 @@ body.dark-mode {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    /* SVGs ship dark — invert to white for purple/frosted backgrounds */
-    filter: brightness(0) invert(1);
+    /* SVGs ship dark — convert to purple for light sidebar */
+    filter: brightness(0) saturate(100%) invert(42%) sepia(60%) saturate(1200%) hue-rotate(260deg);
     opacity: 0.90;
 }
 
-/* Active nav item: light lavender tint to distinguish from inactive */
+/* Active nav item: full-brightness purple */
 .nav-item.active .icon {
-    filter: brightness(0) invert(1) sepia(0.3) saturate(1.5) hue-rotate(230deg);
+    filter: brightness(0) saturate(100%) invert(42%) sepia(60%) saturate(1200%) hue-rotate(260deg);
     opacity: 1;
 }
 
@@ -479,25 +479,24 @@ body {
     background: none;
     border: none;
     border-radius: var(--border-radius);
-    color: #FFFFFF;
+    color: #1a1a1a;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
     text-align: left;
     transition: var(--transition);
     border-left: 4px solid transparent;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .nav-item:hover {
     background-color: rgba(176, 224, 230, 0.30);
-    color: #FFFFFF;
+    color: #1a1a1a;
 }
 
 .nav-item.active {
     background-color: rgba(176, 224, 230, 0.50);
-    color: #FFFFFF;
-    border-left-color: #E0B8FF;
+    color: #1a1a1a;
+    border-left-color: #9D4EDD;
     font-weight: 600;
 }
 
@@ -1791,6 +1790,24 @@ body.dark-mode .sidebar {
     background: rgba(176, 224, 230, 0.30);
     border-right: 1px solid rgba(176, 224, 230, 0.45);
     box-shadow: 2px 0 20px rgba(157, 78, 221, 0.20);
+}
+
+body.dark-mode .nav-item {
+    color: #EEEEEE;
+}
+body.dark-mode .nav-item:hover {
+    color: #FFFFFF;
+}
+body.dark-mode .nav-item.active {
+    color: #FFFFFF;
+}
+body.dark-mode .nav-item .icon {
+    filter: brightness(0) invert(1);
+    opacity: 0.90;
+}
+body.dark-mode .nav-item.active .icon {
+    filter: brightness(0) invert(1) sepia(0.3) saturate(1.5) hue-rotate(230deg);
+    opacity: 1;
 }
 
 body.dark-mode .card {
