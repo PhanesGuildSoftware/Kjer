@@ -336,7 +336,7 @@ html, body {
 
 body {
     font-family: var(--font-body);
-    background: linear-gradient(90deg, #B0E0E6 0%, #ffffff 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #85C8D4 100%);
     color: #1a1a1a;
     line-height: 1.6;
     transition: var(--transition);
@@ -349,7 +349,7 @@ body::after {
     content: '';
     position: fixed;
     top: 50%;
-    left: 50%;
+    left: calc(50% + 40px);
     transform: translate(-50%, -50%);
     width: 320px;
     height: 320px;
@@ -357,7 +357,7 @@ body::after {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    opacity: 0.05;
+    opacity: 0.18;
     z-index: 0;
     pointer-events: none;
 }
