@@ -34,7 +34,7 @@
 /* Page Header Style */
 .page-header {
     text-align: center;
-    color: #1a1a1a;
+    color: #FFFFFF;
     font-size: 28px;
     margin-bottom: 24px;
     letter-spacing: 1px;
@@ -455,10 +455,10 @@ body {
 
 .sidebar {
     width: 220px;
-    background: rgba(157, 78, 221, 0.22);
+    background: rgba(51, 51, 51, 0.22);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border-right: 1px solid rgba(157, 78, 221, 0.35);
+    border-right: 1px solid rgba(51, 51, 51, 0.35);
     overflow-y: auto;
     padding: 0;
     box-shadow: 2px 0 16px rgba(157, 78, 221, 0.15);
@@ -490,12 +490,12 @@ body {
 }
 
 .nav-item:hover {
-    background-color: rgba(157, 78, 221, 0.30);
+    background-color: rgba(51, 51, 51, 0.30);
     color: #FFFFFF;
 }
 
 .nav-item.active {
-    background-color: rgba(157, 78, 221, 0.50);
+    background-color: rgba(51, 51, 51, 0.50);
     color: #FFFFFF;
     border-left-color: #E0B8FF;
     font-weight: 600;
@@ -552,14 +552,14 @@ body {
 /* ==================== CARDS ==================== */
 
 .card {
-    background: rgba(157, 78, 221, 0.18);
+    background: rgba(51, 51, 51, 0.18);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
     margin-bottom: var(--spacing-md);
     box-shadow: 0 2px 12px rgba(157, 78, 221, 0.18);
-    border: 1px solid rgba(157, 78, 221, 0.30);
+    border: 1px solid rgba(51, 51, 51, 0.30);
     transition: var(--transition);
     text-align: center;
 }
@@ -567,7 +567,7 @@ body {
 .card p {
     font-size: 16px;
     line-height: 1.6;
-    color: #333;
+    color: #FFFFFF;
 }
 
 .card:hover {
@@ -585,11 +585,11 @@ body {
 }
 
 .card .small {
-    color: #333;
+    color: #FFFFFF;
 }
 
 .card span {
-    color: #333;
+    color: #FFFFFF;
 }
 
 .card.full-width {
@@ -632,12 +632,12 @@ body {
 }
 
 .status-badge.success {
-    background-color: rgba(157, 78, 221, 0.2);
+    background-color: rgba(51, 51, 51, 0.2);
     color: #B0E0E6;
 }
 
 .status-badge.warning {
-    background-color: rgba(157, 78, 221, 0.2);
+    background-color: rgba(51, 51, 51, 0.2);
     color: #B0E0E6;
 }
 
@@ -736,7 +736,7 @@ body {
     grid-template-columns: 80px 60px 1fr;
     gap: 12px;
     padding: 12px;
-    background-color: rgba(157, 78, 221, 0.06);
+    background-color: rgba(51, 51, 51, 0.06);
     border-bottom: 2px solid var(--color-border);
     font-weight: bold;
     color: var(--color-text-dark);
@@ -828,7 +828,7 @@ body {
 }
 
 .log-level.warning {
-    background-color: rgba(157, 78, 221, 0.2);
+    background-color: rgba(51, 51, 51, 0.2);
     color: #B0E0E6;
 }
 
@@ -912,10 +912,10 @@ body {
 .search-input {
     flex: 1;
     padding: var(--spacing-md);
-    border: 1px solid rgba(157, 78, 221, 0.35);
+    border: 1px solid rgba(51, 51, 51, 0.35);
     border-radius: var(--border-radius);
     font-size: 14px;
-    background: rgba(157, 78, 221, 0.15);
+    background: rgba(51, 51, 51, 0.15);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     color: #FFFFFF;
@@ -930,10 +930,10 @@ body {
 
 .filter-select {
     padding: var(--spacing-md);
-    border: 1px solid rgba(157, 78, 221, 0.35);
+    border: 1px solid rgba(51, 51, 51, 0.35);
     border-radius: var(--border-radius);
     font-size: 14px;
-    background: rgba(157, 78, 221, 0.15);
+    background: rgba(51, 51, 51, 0.15);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     color: #FFFFFF;
@@ -947,12 +947,12 @@ body {
 }
 
 .tool-card {
-    background: rgba(157, 78, 221, 0.18);
+    background: rgba(51, 51, 51, 0.18);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
-    border: 1px solid rgba(157, 78, 221, 0.30);
+    border: 1px solid rgba(51, 51, 51, 0.30);
     cursor: pointer;
     transition: var(--transition);
     text-align: center;
@@ -984,7 +984,7 @@ body {
     justify-content: center;
     font-size: 11px;
     padding: var(--spacing-xs) var(--spacing-md);
-    background-color: rgba(157, 78, 221, 0.15);
+    background-color: rgba(51, 51, 51, 0.15);
     color: #B0E0E6;
     border-radius: 12px;
     margin-bottom: var(--spacing-md);
@@ -995,14 +995,14 @@ body {
 .tool-description {
     font-size: 16px;
     line-height: 1.7;
-    color: #333;
+    color: #FFFFFF;
     margin-bottom: var(--spacing-md);
     min-height: 40px;
 }
 
 .tool-status {
     font-size: 12px;
-    color: #555;
+    color: rgba(255, 255, 255, 0.75);
     margin-bottom: var(--spacing-md);
 }
 
@@ -1064,7 +1064,7 @@ body {
     max-height: 500px;
     overflow: hidden;
     transition: all 0.3s ease;
-    background-color: rgba(157, 78, 221, 0.05);
+    background-color: rgba(51, 51, 51, 0.05);
     border-radius: var(--border-radius);
     padding: var(--spacing-md);
     margin-top: var(--spacing-md);
@@ -1105,12 +1105,12 @@ body {
 }
 
 .profile-card {
-    background: rgba(157, 78, 221, 0.18);
+    background: rgba(51, 51, 51, 0.18);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
-    border: 1px solid rgba(157, 78, 221, 0.30);
+    border: 1px solid rgba(51, 51, 51, 0.30);
     cursor: pointer;
     transition: var(--transition);
 }
@@ -1132,7 +1132,7 @@ body {
 .profile-description {
     font-size: 15px;
     line-height: 1.6;
-    color: #333;
+    color: #FFFFFF;
     margin-bottom: var(--spacing-md);
 }
 
@@ -1153,13 +1153,13 @@ body {
 
 .status-section,
 .log-section {
-    background: rgba(157, 78, 221, 0.18);
+    background: rgba(51, 51, 51, 0.18);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
     margin-bottom: var(--spacing-lg);
-    border: 1px solid rgba(157, 78, 221, 0.30);
+    border: 1px solid rgba(51, 51, 51, 0.30);
 }
 
 .status-section h3,
@@ -1188,7 +1188,7 @@ body {
     font-size: 13px;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    color: #333;
+    color: #FFFFFF;
 }
 
 .progress-bar {
@@ -1208,7 +1208,7 @@ body {
 .metric-value {
     font-size: 14px;
     font-weight: 600;
-    color: #333;
+    color: #FFFFFF;
     text-shadow: none;
 }
 
@@ -1253,17 +1253,17 @@ body {
 }
 
 .log-level.info {
-    background-color: rgba(157, 78, 221, 0.2);
+    background-color: rgba(51, 51, 51, 0.2);
     color: #B0E0E6;
 }
 
 .log-level.success {
-    background-color: rgba(157, 78, 221, 0.2);
+    background-color: rgba(51, 51, 51, 0.2);
     color: #B0E0E6;
 }
 
 .log-level.warning {
-    background-color: rgba(157, 78, 221, 0.2);
+    background-color: rgba(51, 51, 51, 0.2);
     color: #B0E0E6;
 }
 
@@ -1282,13 +1282,13 @@ body {
 /* ==================== SETTINGS SECTION ==================== */
 
 .settings-section {
-    background: rgba(157, 78, 221, 0.18);
+    background: rgba(51, 51, 51, 0.18);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
     margin-bottom: var(--spacing-lg);
-    border: 1px solid rgba(157, 78, 221, 0.30);
+    border: 1px solid rgba(51, 51, 51, 0.30);
 }
 
 .settings-section h3 {
@@ -1307,7 +1307,7 @@ body {
     display: block;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    color: #333;
+    color: #FFFFFF;
     cursor: pointer;
 }
 
@@ -1320,17 +1320,17 @@ body {
 .form-group small {
     display: block;
     margin-top: var(--spacing-xs);
-    color: #555;
+    color: rgba(255, 255, 255, 0.75);
     font-size: 12px;
 }
 
 .form-input {
     width: 100%;
     padding: var(--spacing-md);
-    border: 1px solid rgba(157, 78, 221, 0.35);
+    border: 1px solid rgba(51, 51, 51, 0.35);
     border-radius: var(--border-radius);
     font-size: 14px;
-    background: rgba(157, 78, 221, 0.15);
+    background: rgba(51, 51, 51, 0.15);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     color: #FFFFFF;
@@ -1480,14 +1480,14 @@ body {
 /* ==================== FOOTER ==================== */
 
 .footer {
-    background: rgba(157, 78, 221, 0.22);
+    background: rgba(51, 51, 51, 0.22);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(157, 78, 221, 0.35);
+    border-top: 1px solid rgba(51, 51, 51, 0.35);
     padding: var(--spacing-lg);
     text-align: center;
     font-size: 12px;
-    color: #333;
+    color: #FFFFFF;
     box-shadow: 0 -2px 12px rgba(157, 78, 221, 0.15);
 }
 
@@ -1507,17 +1507,17 @@ body {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background: rgba(157, 78, 221, 0.30);
+    background: rgba(51, 51, 51, 0.30);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    color: #333;
+    color: #FFFFFF;
     padding: var(--spacing-lg);
     border-radius: var(--border-radius);
     box-shadow: 0 4px 20px rgba(157, 78, 221, 0.30);
     animation: slideIn 0.3s ease;
     max-width: 300px;
     z-index: 1000;
-    border: 1px solid rgba(157, 78, 221, 0.50);
+    border: 1px solid rgba(51, 51, 51, 0.50);
 }
 
 @keyframes slideIn {
@@ -1659,11 +1659,11 @@ body {
 }
 
 .modal-content {
-    background: rgba(157, 78, 221, 0.25);
+    background: rgba(51, 51, 51, 0.25);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-radius: var(--border-radius);
-    border: 1px solid rgba(157, 78, 221, 0.50);
+    border: 1px solid rgba(51, 51, 51, 0.50);
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
     max-width: 600px;
     width: 90%;
@@ -1811,14 +1811,14 @@ body.dark-mode .page-header {
 }
 
 body.dark-mode .sidebar {
-    background: rgba(157, 78, 221, 0.30);
-    border-right: 1px solid rgba(157, 78, 221, 0.45);
+    background: rgba(51, 51, 51, 0.30);
+    border-right: 1px solid rgba(51, 51, 51, 0.45);
     box-shadow: 2px 0 20px rgba(157, 78, 221, 0.20);
 }
 
 body.dark-mode .card {
-    background: rgba(157, 78, 221, 0.22);
-    border: 1px solid rgba(157, 78, 221, 0.38);
+    background: rgba(51, 51, 51, 0.22);
+    border: 1px solid rgba(51, 51, 51, 0.38);
 }
 
 body.dark-mode .logo-version {
@@ -1911,7 +1911,7 @@ body.dark-mode .filter-btn {
 }
 
 body.dark-mode .filter-btn:hover {
-    background-color: rgba(157, 78, 221, 0.1);
+    background-color: rgba(51, 51, 51, 0.1);
 }
 
 body.dark-mode .filter-btn.active {
