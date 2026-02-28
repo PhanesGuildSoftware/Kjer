@@ -414,7 +414,7 @@ body {
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     transition: all 0.3s ease;
 }
 
@@ -424,17 +424,17 @@ body {
 
 .network-status.connected {
     color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .network-status.not-connected {
     color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .network-status.connecting {
     color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .app-name {
@@ -581,7 +581,7 @@ body {
 .card h5,
 .card h6 {
     color: #9D4EDD;
-    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .card .small {
@@ -696,10 +696,10 @@ body {
 .activity-header h3 {
     margin: 0;
     color: #9D4EDD;
-    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     flex: 1;
     text-align: center;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .btn-small {
@@ -974,7 +974,7 @@ body {
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
     color: #9D4EDD;
-    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     font-family: var(--font-header);
 }
 
@@ -1125,7 +1125,7 @@ body {
     font-weight: 600;
     margin-bottom: var(--spacing-md);
     color: #9D4EDD;
-    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     font-family: var(--font-header);
 }
 
@@ -1166,7 +1166,7 @@ body {
 .log-section h3 {
     text-align: center;
     color: #9D4EDD;
-    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     margin-bottom: var(--spacing-lg);
     font-family: var(--font-header);
 }
@@ -1294,7 +1294,7 @@ body {
 .settings-section h3 {
     text-align: center;
     color: #9D4EDD;
-    text-shadow: 0 0 10px rgba(255,255,255,0.6), 0 0 20px rgba(157,78,221,0.4);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
     margin-bottom: var(--spacing-lg);
     font-family: var(--font-header);
 }
@@ -1828,7 +1828,7 @@ body.dark-mode .logo-version {
 body.dark-mode .tab-content h2,
 body.dark-mode .tab-content h3 {
     color: #9D4EDD;
-    text-shadow: 0 0 10px rgba(255,255,255,0.4), 0 0 20px rgba(157,78,221,0.5);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 body.dark-mode .card p,
