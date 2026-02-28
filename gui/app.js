@@ -105,7 +105,13 @@ function resetApplicationState() {
     localStorage.removeItem('notifications');
     localStorage.removeItem('installPath');
     localStorage.removeItem('autoUpdate');
-    
+
+    // Also delete the on-disk initialized flag so it doesn't get restored on next load.
+    // Without this, loadInstallStateIntoApp() would immediately re-set ktorInitialized=true.
+    try {
+        window.electronAPI?.executeCommand?.('bash', ['-c', 'rm -f ~/.kjer/initialized']);
+    } catch (e) { /* non-fatal */ }
+
     logActivity('Application state reset. License remains active on this system.', 'warning');
     setTimeout(() => {
         location.reload();
