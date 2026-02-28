@@ -927,7 +927,7 @@ def show_status():
 		if lic.get('warning'):
 			print(f"  \033[1;33m⚠ {lic['warning']}\033[0m")
 	else:
-		print(f"  Status:         \033[1;31mNot activated\033[0m")
+		print(f"  Status:         \033[1;32m[Free]\033[0m")
 		if lic.get('expired'):
 			print(f"  \033[1;31m⚠ {lic.get('error', 'License expired')}\033[0m")
 		elif lic.get('version_mismatch'):

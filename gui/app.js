@@ -1799,8 +1799,8 @@ function updateStatusPage() {
                 licenseEl.textContent = `v${version} (${type})`;
                 licenseEl.style.color = '#4caf50';
             } else {
-                licenseEl.textContent = 'Not Activated';
-                licenseEl.style.color = '#ff9800';
+                licenseEl.textContent = '[Free]';
+                licenseEl.style.color = '#4caf50';
             }
         }
         return;
@@ -1828,8 +1828,8 @@ function updateStatusPage() {
             licenseEl.textContent = `v${version} (${type})`;
             licenseEl.style.color = '#4caf50';
         } else {
-            licenseEl.textContent = 'Not Activated';
-            licenseEl.style.color = '#ff9800';
+            licenseEl.textContent = '[Free]';
+            licenseEl.style.color = '#4caf50';
         }
     }
 }
@@ -2117,9 +2117,9 @@ function updateLicenseStatus() {
             statusText.textContent   = 'Activated';
             versionText.textContent  = `v${currentVersion} (${licenseType})`;
         } else {
-            statusBadge.className    = 'status-badge warning';
-            statusText.textContent   = 'Not Activated';
-            versionText.textContent  = 'Activate to unlock features';
+            statusBadge.className    = 'status-badge';
+            statusText.textContent   = '[Free]';
+            versionText.textContent  = 'Free v1.0.0';
         }
     }
 
@@ -2133,7 +2133,7 @@ function updateLicenseStatus() {
     if (currentVerEl)  currentVerEl.textContent  = currentVersion;
     if (licenseTypeEl) licenseTypeEl.textContent  = isActivated
         ? `(${licenseType.charAt(0).toUpperCase() + licenseType.slice(1)})`
-        : '(Not Activated)';
+        : '[Free]';
 }
 
 function updateLastUpdateTime() {
