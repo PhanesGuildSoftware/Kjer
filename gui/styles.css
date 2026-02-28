@@ -102,14 +102,14 @@ body.dark-mode {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    /* SVGs ship dark — show dark on light bg by default (dark mode inverts to white) */
-    filter: brightness(0);
-    opacity: 0.85;
+    /* SVGs ship dark — invert to white for purple/frosted backgrounds */
+    filter: brightness(0) invert(1);
+    opacity: 0.90;
 }
 
-/* Active nav item: tint icon to the accent purple */
+/* Active nav item: light lavender tint to distinguish from inactive */
 .nav-item.active .icon {
-    filter: brightness(0) invert(1) sepia(1) saturate(3) hue-rotate(230deg);
+    filter: brightness(0) invert(1) sepia(0.3) saturate(1.5) hue-rotate(230deg);
     opacity: 1;
 }
 
@@ -455,11 +455,13 @@ body {
 
 .sidebar {
     width: 220px;
-    background-color: var(--color-bg-white);
-    border-right: 1px solid var(--color-border);
+    background: rgba(157, 78, 221, 0.22);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(157, 78, 221, 0.35);
     overflow-y: auto;
     padding: 0;
-    box-shadow: 2px 0 8px var(--color-card-shadow);
+    box-shadow: 2px 0 16px rgba(157, 78, 221, 0.15);
     display: flex;
     flex-direction: column;
 }
@@ -477,24 +479,25 @@ body {
     background: none;
     border: none;
     border-radius: var(--border-radius);
-    color: #9D4EDD;
+    color: #FFFFFF;
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
     text-align: left;
     transition: var(--transition);
     border-left: 4px solid transparent;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .nav-item:hover {
-    background-color: var(--color-bg-light);
-    color: #9D4EDD;
+    background-color: rgba(157, 78, 221, 0.30);
+    color: #FFFFFF;
 }
 
 .nav-item.active {
-    background-color: rgba(157, 78, 221, 0.1);
-    color: #B0E0E6;
-    border-left-color: #9D4EDD;
+    background-color: rgba(157, 78, 221, 0.50);
+    color: #FFFFFF;
+    border-left-color: #E0B8FF;
     font-weight: 600;
 }
 
@@ -549,12 +552,14 @@ body {
 /* ==================== CARDS ==================== */
 
 .card {
-    background: var(--color-bg-white);
+    background: rgba(157, 78, 221, 0.18);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
     margin-bottom: var(--spacing-md);
-    box-shadow: 0 1px 4px var(--color-card-shadow);
-    border: 1px solid var(--color-border);
+    box-shadow: 0 2px 12px rgba(157, 78, 221, 0.18);
+    border: 1px solid rgba(157, 78, 221, 0.30);
     transition: var(--transition);
     text-align: center;
 }
@@ -562,30 +567,30 @@ body {
 .card p {
     font-size: 16px;
     line-height: 1.6;
-    color: var(--color-text-light);
+    color: #FFFFFF;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
 .card:hover {
-    box-shadow: 0 4px 12px var(--color-card-shadow);
+    box-shadow: 0 4px 20px rgba(157, 78, 221, 0.30);
     transform: translateY(-2px);
 }
 
-/* Ensure all text inside cards is white */
 .card h3,
 .card h2,
 .card h4,
 .card h5,
 .card h6 {
-    color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    color: #FFFFFF;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
 
 .card .small {
-    color: var(--color-text-light);
+    color: rgba(255, 255, 255, 0.85);
 }
 
 .card span {
-    color: var(--color-text-dark);
+    color: #FFFFFF;
 }
 
 .card.full-width {
@@ -691,7 +696,7 @@ body {
 
 .activity-header h3 {
     margin: 0;
-    color: #9D4EDD;
+    color: #FFFFFF;
     flex: 1;
     text-align: center;
     text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
@@ -907,11 +912,13 @@ body {
 .search-input {
     flex: 1;
     padding: var(--spacing-md);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(157, 78, 221, 0.35);
     border-radius: var(--border-radius);
     font-size: 14px;
-    background-color: var(--color-bg-white);
-    color: var(--color-text-dark);
+    background: rgba(157, 78, 221, 0.15);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #FFFFFF;
     transition: var(--transition);
 }
 
@@ -923,11 +930,13 @@ body {
 
 .filter-select {
     padding: var(--spacing-md);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(157, 78, 221, 0.35);
     border-radius: var(--border-radius);
     font-size: 14px;
-    background-color: var(--color-bg-white);
-    color: var(--color-text-dark);
+    background: rgba(157, 78, 221, 0.15);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #FFFFFF;
     cursor: pointer;
 }
 
@@ -938,17 +947,19 @@ body {
 }
 
 .tool-card {
-    background: var(--color-bg-white);
+    background: rgba(157, 78, 221, 0.18);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(157, 78, 221, 0.30);
     cursor: pointer;
     transition: var(--transition);
     text-align: center;
 }
 
 .tool-card:hover {
-    box-shadow: 0 4px 12px var(--color-card-shadow);
+    box-shadow: 0 4px 20px rgba(157, 78, 221, 0.30);
     transform: translateY(-4px);
 }
 
@@ -1095,10 +1106,12 @@ body {
 }
 
 .profile-card {
-    background: var(--color-bg-white);
+    background: rgba(157, 78, 221, 0.18);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
-    border: 2px solid var(--color-border);
+    border: 1px solid rgba(157, 78, 221, 0.30);
     cursor: pointer;
     transition: var(--transition);
 }
@@ -1112,14 +1125,15 @@ body {
     font-size: 18px;
     font-weight: 600;
     margin-bottom: var(--spacing-md);
-    color: var(--color-text-dark);
+    color: #FFFFFF;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.35);
     font-family: var(--font-header);
 }
 
 .profile-description {
     font-size: 15px;
     line-height: 1.6;
-    color: var(--color-text-light);
+    color: rgba(255, 255, 255, 0.88);
     margin-bottom: var(--spacing-md);
 }
 
@@ -1140,18 +1154,20 @@ body {
 
 .status-section,
 .log-section {
-    background: var(--color-bg-white);
+    background: rgba(157, 78, 221, 0.18);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
     margin-bottom: var(--spacing-lg);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(157, 78, 221, 0.30);
 }
 
 .status-section h3,
 .log-section h3 {
     text-align: center;
-    color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    color: #FFFFFF;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.35);
     margin-bottom: var(--spacing-lg);
     font-family: var(--font-header);
 }
@@ -1267,17 +1283,19 @@ body {
 /* ==================== SETTINGS SECTION ==================== */
 
 .settings-section {
-    background: var(--color-bg-white);
+    background: rgba(157, 78, 221, 0.18);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-radius: var(--border-radius);
     padding: var(--spacing-lg);
     margin-bottom: var(--spacing-lg);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(157, 78, 221, 0.30);
 }
 
 .settings-section h3 {
     text-align: center;
-    color: #9D4EDD;
-    text-shadow: 0 0 8px rgba(157, 78, 221, 0.3);
+    color: #FFFFFF;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.35);
     margin-bottom: var(--spacing-lg);
     font-family: var(--font-header);
 }
@@ -1310,11 +1328,13 @@ body {
 .form-input {
     width: 100%;
     padding: var(--spacing-md);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgba(157, 78, 221, 0.35);
     border-radius: var(--border-radius);
     font-size: 14px;
-    background-color: var(--color-bg-light);
-    color: var(--color-text-dark);
+    background: rgba(157, 78, 221, 0.15);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #FFFFFF;
 }
 
 .form-input:focus {
@@ -1461,13 +1481,15 @@ body {
 /* ==================== FOOTER ==================== */
 
 .footer {
-    background-color: var(--color-bg-white);
-    border-top: 1px solid var(--color-border);
+    background: rgba(157, 78, 221, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(157, 78, 221, 0.35);
     padding: var(--spacing-lg);
     text-align: center;
     font-size: 12px;
-    color: var(--color-text-light);
-    box-shadow: 0 -2px 8px var(--color-card-shadow);
+    color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 -2px 12px rgba(157, 78, 221, 0.15);
 }
 
 .footer a {
@@ -1486,15 +1508,17 @@ body {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background-color: var(--color-bg-white);
-    color: var(--color-text-dark);
+    background: rgba(157, 78, 221, 0.30);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: #FFFFFF;
     padding: var(--spacing-lg);
     border-radius: var(--border-radius);
-    box-shadow: 0 4px 12px rgba(157, 78, 221, 0.2);
+    box-shadow: 0 4px 20px rgba(157, 78, 221, 0.30);
     animation: slideIn 0.3s ease;
     max-width: 300px;
     z-index: 1000;
-    border: 1px solid rgba(157, 78, 221, 0.3);
+    border: 1px solid rgba(157, 78, 221, 0.50);
 }
 
 @keyframes slideIn {
@@ -1636,10 +1660,12 @@ body {
 }
 
 .modal-content {
-    background-color: var(--color-bg-white);
+    background: rgba(157, 78, 221, 0.25);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border-radius: var(--border-radius);
-    border: 1px solid #9D4EDD;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(157, 78, 221, 0.50);
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
     max-width: 600px;
     width: 90%;
     max-height: 80vh;
@@ -1783,6 +1809,17 @@ body {
 
 body.dark-mode .page-header {
     color: #FFFFFF;
+}
+
+body.dark-mode .sidebar {
+    background: rgba(157, 78, 221, 0.30);
+    border-right: 1px solid rgba(157, 78, 221, 0.45);
+    box-shadow: 2px 0 20px rgba(157, 78, 221, 0.20);
+}
+
+body.dark-mode .card {
+    background: rgba(157, 78, 221, 0.22);
+    border: 1px solid rgba(157, 78, 221, 0.38);
 }
 
 body.dark-mode .logo-version {
