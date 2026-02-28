@@ -4163,21 +4163,48 @@ function saveSetting(key, value) {
     logActivity(`Setting updated: ${key}`);
 }
 
+function saveAllSettings() {
+    // Checkboxes
+    const autoRefresh   = document.getElementById('autoRefresh');
+    const notifications = document.getElementById('notifications');
+    const darkMode      = document.getElementById('darkMode');
+    const autoUpdate    = document.querySelector('input[onchange*="autoUpdate"]');
+    const installPath   = document.querySelector('input[onchange*="installPath"]');
+
+    if (autoRefresh)   localStorage.setItem('autoRefresh',   JSON.stringify(autoRefresh.checked));
+    if (notifications) localStorage.setItem('notifications', JSON.stringify(notifications.checked));
+    if (darkMode)      localStorage.setItem('darkMode',      JSON.stringify(darkMode.checked));
+    if (autoUpdate)    localStorage.setItem('autoUpdate',    JSON.stringify(autoUpdate.checked));
+    if (installPath)   localStorage.setItem('installPath',   JSON.stringify(installPath.value));
+
+    showNotification('Settings saved successfully');
+    logActivity('Settings saved by user');
+}
+
 function loadSettings() {
-    // Load dark mode setting
+    // Dark mode
     const darkMode = JSON.parse(localStorage.getItem('darkMode') || 'false');
     if (darkMode) {
         document.body.classList.add('dark-mode');
         const darkModeCheckbox = document.getElementById('darkMode');
         if (darkModeCheckbox) darkModeCheckbox.checked = true;
     }
-    
-    // Load other settings
-    const autoRefresh = JSON.parse(localStorage.getItem('autoRefresh') || 'true');
-    const notifications = JSON.parse(localStorage.getItem('notifications') || 'true');
-    
-    if (document.getElementById('autoRefresh')) document.getElementById('autoRefresh').checked = autoRefresh;
+
+    // Checkboxes
+    const autoRefresh   = JSON.parse(localStorage.getItem('autoRefresh')   ?? 'true');
+    const notifications = JSON.parse(localStorage.getItem('notifications') ?? 'true');
+    const autoUpdate    = JSON.parse(localStorage.getItem('autoUpdate')    ?? 'true');
+
+    if (document.getElementById('autoRefresh'))   document.getElementById('autoRefresh').checked   = autoRefresh;
     if (document.getElementById('notifications')) document.getElementById('notifications').checked = notifications;
+
+    const autoUpdateEl = document.querySelector('input[onchange*="autoUpdate"]');
+    if (autoUpdateEl) autoUpdateEl.checked = autoUpdate;
+
+    // Text inputs
+    const savedPath  = localStorage.getItem('installPath');
+    const installPathEl = document.querySelector('input[onchange*="installPath"]');
+    if (installPathEl && savedPath) installPathEl.value = JSON.parse(savedPath);
 }
 
 function toggleTheme() {
