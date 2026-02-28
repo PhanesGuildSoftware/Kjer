@@ -69,6 +69,12 @@ detect_os() {
 }
 EOF
     ok "Install state written to ~/.kjer/install_state.json"
+
+    # Always clear the initialized flag on install/reinstall.
+    # A fresh install means the user must go through initialization again.
+    # Leaving a stale flag causes the GUI to show "Initialized" incorrectly.
+    rm -f "$HOME/.kjer/initialized"
+    ok "Initialization state cleared (re-initialization required)"
 }
 
 # ── Package manager helpers ──────────────────────────────────────────────────
