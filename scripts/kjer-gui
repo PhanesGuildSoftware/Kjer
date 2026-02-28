@@ -30,5 +30,21 @@ if [ ! -d "$DESKTOP_DIR" ]; then
     exit 1
 fi
 
+# Determine sandbox flags.
+# If chrome-sandbox is not owned by root with SUID bit (mode 4755), pass
+# --no-sandbox so Electron can still launch without FATAL sandbox error.
+SANDBOX="$DESKTOP_DIR/node_modules/electron/dist/chrome-sandbox"
+SANDBOX_FLAGS=""
+if [ -f "$SANDBOX" ]; then
+    SANDBOX_OWNER="$(stat -c '%U' "$SANDBOX" 2>/dev/null)"
+    SANDBOX_MODE="$(stat -c '%a' "$SANDBOX" 2>/dev/null)"
+    if [ "$SANDBOX_OWNER" != "root" ] || [ "$SANDBOX_MODE" != "4755" ]; then
+        SANDBOX_FLAGS="--no-sandbox"
+    fi
+else
+    # Binary missing entirely — skip sandbox
+    SANDBOX_FLAGS="--no-sandbox"
+fi
+
 # Launch Electron GUI
-cd "$DESKTOP_DIR" && "$ELECTRON_BIN" . "$@"
+cd "$DESKTOP_DIR" && "$ELECTRON_BIN" . $SANDBOX_FLAGS "$@"

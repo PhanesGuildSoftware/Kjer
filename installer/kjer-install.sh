@@ -265,27 +265,31 @@ install_electron() {
     fi
 
     LOCAL_ELECTRON="$DESKTOP_DIR/node_modules/.bin/electron"
-    if [ -f "$LOCAL_ELECTRON" ]; then
-        ok "Electron already installed: $LOCAL_ELECTRON"
-        return 0
+    if [ ! -f "$LOCAL_ELECTRON" ]; then
+        info "Running npm install in $DESKTOP_DIR ..."
+        (cd "$DESKTOP_DIR" && npm install 2>&1 | tail -5)
     fi
-
-    info "Running npm install in $DESKTOP_DIR ..."
-    (cd "$DESKTOP_DIR" && npm install 2>&1 | tail -5)
 
     if [ -f "$LOCAL_ELECTRON" ]; then
         ok "Electron installed: $LOCAL_ELECTRON"
     else
         warn "npm install completed but Electron binary not confirmed."
         warn "Try running: cd $DESKTOP_DIR && npm install"
+        return 0
     fi
 
-    # Fix chrome-sandbox permissions (required on Linux for Electron to launch)
+    # Fix chrome-sandbox SUID permissions — required on Linux for Electron to launch.
+    # Runs whether Electron was just installed or was already present.
+    # Must run as root (installer is expected to be called with sudo).
     SANDBOX="$DESKTOP_DIR/node_modules/electron/dist/chrome-sandbox"
     if [ -f "$SANDBOX" ]; then
-        chown root:root "$SANDBOX" 2>/dev/null && chmod 4755 "$SANDBOX" 2>/dev/null \
-            && ok "Electron sandbox permissions set." \
-            || warn "Could not set sandbox permissions on $SANDBOX (may need manual: sudo chown root:root $SANDBOX && sudo chmod 4755 $SANDBOX)"
+        if sudo chown root:root "$SANDBOX" 2>/dev/null && sudo chmod 4755 "$SANDBOX" 2>/dev/null; then
+            ok "Electron sandbox permissions set (chrome-sandbox 4755 root:root)."
+        else
+            warn "Could not set sandbox permissions automatically."
+            warn "Run manually: sudo chown root:root \"$SANDBOX\" && sudo chmod 4755 \"$SANDBOX\""
+            info "Alternatively, Kjer will fall back to --no-sandbox mode automatically."
+        fi
     fi
 }
 
