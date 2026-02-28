@@ -179,7 +179,23 @@ if (Test-Path $CliScript) {
     Warn "Ensure Kjer is fully extracted. Re-run after verifying the file exists."
 }
 
-# ── Step 5: Summary ───────────────────────────────────────────────────────────
+# ── Step 5: System analysis ─────────────────────────────────────────────────
+# Pre-populate system_analysis.json so the GUI shows installed tools immediately on first launch.
+Hdr "Initial System Analysis"
+$cliPy = Join-Path $ScriptsDir "kjer-cli.py"
+if (Test-Path $cliPy) {
+    Info "Detecting pre-installed security tools on this system..."
+    try {
+        & $pyExe $cliPy --analyze 2>&1 | Out-Null
+        Ok "System analysis complete — pre-installed tools detected and cached."
+    } catch {
+        Warn "System analysis could not run now. Kjer will detect tools on first GUI launch."
+    }
+} else {
+    Warn "kjer-cli.py not found — skipping system analysis."
+}
+
+# ── Step 6: Summary ───────────────────────────────────────────────────────────
 Write-Host ""
 Write-Host "  ============================================" -ForegroundColor Magenta
 Write-Host "  Kjer dependencies installed successfully!" -ForegroundColor Green

@@ -299,7 +299,7 @@ install_electron() {
     fi
 }
 
-# ── Step 5: Summary ───────────────────────────────────────────────────────────
+# ── Step 6: Summary ───────────────────────────────────────────────────────────
 show_summary() {
     echo
     echo -e "${MAGENTA}══════════════════════════════════════════════${NC}"
@@ -350,6 +350,17 @@ main() {
     else
         install_nodejs
         install_electron
+    fi
+
+    # ── Step 5: System analysis ─────────────────────────────────────────────
+    # Pre-populate system analysis so the GUI shows installed tools immediately on first launch.
+    # --analyze is read-only; it does not require prior initialization to run.
+    echo
+    info "Running initial system analysis to detect pre-installed security tools…"
+    if python3 "$KJER_ROOT/scripts/kjer-cli.py" --analyze > /dev/null 2>&1; then
+        ok "System analysis complete — pre-installed tools detected and cached."
+    else
+        warn "System analysis could not run now. Kjer will detect tools automatically on first GUI launch."
     fi
 
     show_summary
