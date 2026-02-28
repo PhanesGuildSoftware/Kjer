@@ -395,6 +395,20 @@ def check_os_compatibility():
 	except Exception:
 		pass
 
+	# Secondary: native platform detection — fast, no file or backend needed.
+	# If we're running python3 on Linux this is always reliable.
+	try:
+		import platform as _plat
+		native_sys = _plat.system().lower()
+		if 'linux' in native_sys:
+			return True, 'linux', 'OS compatibility verified (native detection)'
+		elif 'darwin' in native_sys:
+			return False, 'macos', 'This is the Linux CLI version. Your system is macOS.'
+		elif 'windows' in native_sys:
+			return False, 'windows', 'This is the Linux CLI version. Your system is Windows — use kjer-cli.ps1.'
+	except Exception:
+		pass
+
 	# Fallback: read from backend (set during GUI initialization)
 	backend = BackendAPI()
 	system_status = backend.get_system_status()

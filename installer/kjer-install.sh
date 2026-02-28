@@ -39,7 +39,16 @@ SKIP_GUI=false
 for arg in "$@"; do
     [[ "$arg" == "--no-gui" ]] && SKIP_GUI=true
 done
-
+# ── Real user home (handles running under sudo) ─────────────────────────────
+# When the script is run with `sudo bash kjer-install.sh`, $HOME is /root.
+# We need to write install state to the invoking user's home, not root's.
+if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    REAL_USER="$SUDO_USER"
+    REAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+else
+    REAL_USER="${USER:-$(whoami)}"
+    REAL_HOME="$HOME"
+fi
 # ── OS Detection ────────────────────────────────────────────────────────────
 detect_os() {
     SYS="$(uname -s)"
@@ -58,9 +67,9 @@ detect_os() {
     ok "Detected: $DISTRO_NAME"
 
     # Write install state so the GUI and CLI know the OS without user-agent detection
-    mkdir -p "$HOME/.kjer"
+    mkdir -p "$REAL_HOME/.kjer"
     INSTALL_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    cat > "$HOME/.kjer/install_state.json" <<EOF
+    cat > "$REAL_HOME/.kjer/install_state.json" <<EOF
 {
   "os": "$OS_TYPE",
   "distro": "$DISTRO_NAME",
@@ -68,12 +77,13 @@ detect_os() {
   "install_path": "$KJER_ROOT"
 }
 EOF
-    ok "Install state written to ~/.kjer/install_state.json"
+    chown -R "$REAL_USER" "$REAL_HOME/.kjer" 2>/dev/null || true
+    ok "Install state written to $REAL_HOME/.kjer/install_state.json"
 
     # Always clear the initialized flag on install/reinstall.
     # A fresh install means the user must go through initialization again.
     # Leaving a stale flag causes the GUI to show "Initialized" incorrectly.
-    rm -f "$HOME/.kjer/initialized"
+    rm -f "$REAL_HOME/.kjer/initialized"
     ok "Initialization state cleared (re-initialization required)"
 }
 
@@ -357,7 +367,7 @@ main() {
     # --analyze is read-only; it does not require prior initialization to run.
     echo
     info "Running initial system analysis to detect pre-installed security tools…"
-    if python3 "$KJER_ROOT/scripts/kjer-cli.py" --analyze > /dev/null 2>&1; then
+    if sudo -u "$REAL_USER" python3 "$KJER_ROOT/scripts/kjer-cli.py" --analyze > /dev/null 2>&1; then
         ok "System analysis complete — pre-installed tools detected and cached."
     else
         warn "System analysis could not run now. Kjer will detect tools automatically on first GUI launch."
