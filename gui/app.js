@@ -1380,18 +1380,18 @@ const ActivityLog = {
     },
 
     render: function() {
-        const logEntries = document.getElementById('logEntries');
-        if (!logEntries) return;
-        
-        logEntries.innerHTML = this.entries.map(entry => `
+        const logContainer = document.getElementById('activityLog');
+        if (!logContainer) return;
+
+        logContainer.innerHTML = this.entries.map(entry => `
             <div class="log-entry">
-                <div class="log-col-time">${entry.time}</div>
-                <div class="log-col-level log-level ${entry.level}">${entry.level.toUpperCase()}</div>
-                <div class="log-col-message">${entry.message}</div>
+                <span class="log-time">${entry.time}</span>
+                <span class="log-level ${entry.level}">${entry.level.toUpperCase()}</span>
+                <span class="log-message">${entry.message}</span>
             </div>
         `).join('');
     },
-    
+
     clear: function() {
         this.entries = [];
         this.render();
@@ -1401,6 +1401,82 @@ const ActivityLog = {
 function logActivity(message, level = 'info', tool = '', important = false) {
     ActivityLog.add(message, level, tool, important);
 }
+
+// ==================== SECURITY MONITOR ====================
+// Real-time, per-tool-per-threat feed rendered to #logEntries
+// (Dashboard Security Activity Monitor). Receives all scan phase
+// headers, per-tool scan results, defend actions, and section
+// dividers. Separate from ActivityLog which shows high-level
+// summaries in Status & Logs.
+
+const SecurityMonitor = {
+    maxEntries: 400,
+    entries: [],
+
+    _fmt: function(tool, message, level, type) {
+        const now = new Date();
+        return {
+            time: now.toLocaleTimeString('en-US', { hour12: true }),
+            tool: tool || '',
+            message: message,
+            level: level || 'info',
+            type: type || 'result'   // 'result' | 'section' | 'divider'
+        };
+    },
+
+    log: function(tool, message, level) {
+        this.entries.unshift(this._fmt(tool, message, level, 'result'));
+        if (this.entries.length > this.maxEntries) this.entries.pop();
+        this.render();
+    },
+
+    section: function(title) {
+        this.entries.unshift(this._fmt('', title, 'info', 'section'));
+        if (this.entries.length > this.maxEntries) this.entries.pop();
+        this.render();
+    },
+
+    divider: function() {
+        this.entries.unshift(this._fmt('', '═'.repeat(46), 'info', 'divider'));
+        if (this.entries.length > this.maxEntries) this.entries.pop();
+        this.render();
+    },
+
+    render: function() {
+        const logEntries = document.getElementById('logEntries');
+        if (!logEntries) return;
+
+        logEntries.innerHTML = this.entries.map(entry => {
+            if (entry.type === 'divider') {
+                return `<div class="log-entry log-divider">
+                    <div class="log-col-time"></div>
+                    <div class="log-col-level"></div>
+                    <div class="log-col-message" style="color:#444;letter-spacing:1px">${entry.message}</div>
+                </div>`;
+            }
+            if (entry.type === 'section') {
+                return `<div class="log-entry log-section">
+                    <div class="log-col-time">${entry.time}</div>
+                    <div class="log-col-level"></div>
+                    <div class="log-col-message" style="color:#9D4EDD;font-weight:600;letter-spacing:0.5px">${entry.message}</div>
+                </div>`;
+            }
+            const toolCol = entry.tool
+                ? `<span style="color:#B0E0E6;font-weight:600">[${entry.tool}]</span> `
+                : '';
+            return `<div class="log-entry">
+                <div class="log-col-time">${entry.time}</div>
+                <div class="log-col-level log-level ${entry.level}">${entry.level.toUpperCase()}</div>
+                <div class="log-col-message">${toolCol}${entry.message}</div>
+            </div>`;
+        }).join('');
+    },
+
+    clear: function() {
+        this.entries = [];
+        this.render();
+    }
+};
 
 function showNotification(message) {
     const notification = document.createElement('div');
@@ -2657,15 +2733,13 @@ window.KjerLastScanResults = null;
 
 // ─── Helpers for clean log formatting ────────────────────────────
 function logSection(title) {
-    const pad = 44 - title.length - 4;
-    logActivity(`── ${title} ${'─'.repeat(Math.max(pad, 2))}`, 'info');
+    SecurityMonitor.section(title);
 }
 function logResult(tool, message, level) {
-    const dots = '.'.repeat(Math.max(2, 20 - tool.length));
-    logActivity(`  ${tool} ${dots} ${message}`, level || 'info');
+    SecurityMonitor.log(tool, message, level || 'info');
 }
-function logDivider(char) {
-    logActivity('═'.repeat(46), 'info');
+function logDivider() {
+    SecurityMonitor.divider();
 }
 
 // ─── SCAN ENGINE ─────────────────────────────────────────────────
@@ -2711,11 +2785,12 @@ function performComprehensiveScan() {
     window.KjerLastScanResults = null;  // clear stale results
 
     // ── Header ────────────────────────────────────────────────────
-    logDivider();
-    logActivity('KJER SECURITY SCAN — ' + new Date().toLocaleTimeString(), 'warning', '', true);
+    SecurityMonitor.clear();
+    SecurityMonitor.divider();
+    SecurityMonitor.section('KJER SECURITY SCAN — ' + new Date().toLocaleTimeString());
     const os = localStorage.getItem('userDistro') || localStorage.getItem('userOS') || 'this system';
-    logActivity(`Target: ${os}  |  Tools engaged: ${activePhases.reduce((a,[,t])=>a+t.length,0)}`, 'info');
-    logDivider();
+    SecurityMonitor.log('', `Target: ${os}  |  Tools engaged: ${activePhases.reduce((a,[,t])=>a+t.length,0)}`, 'info');
+    SecurityMonitor.divider();
 
     showNotification('Security scan started — results streaming to Activity Monitor...');
     updateLastUpdateTime();
@@ -2762,19 +2837,23 @@ function performComprehensiveScan() {
                            : results.medium   > 0 ? 'warning'
                            : 'success';
 
-        logDivider();
-        logActivity('SCAN COMPLETE — ' + elapsed + 's', summaryLevel, '', true);
-        logActivity(
-            `Threat Level: ${threatLevel}  |  ` +
-            `Critical: ${results.critical}  High: ${results.high}  ` +
-            `Medium: ${results.medium}  Low: ${results.low}`, summaryLevel, '', true);
-
+        // Security Monitor — detailed per-run output
+        SecurityMonitor.divider();
+        SecurityMonitor.section(`SCAN COMPLETE — ${elapsed}s`);
+        SecurityMonitor.log('', `Threat Level: ${threatLevel}  |  Critical: ${results.critical}  High: ${results.high}  Medium: ${results.medium}  Low: ${results.low}`, summaryLevel);
         if (results.findings.length > 0) {
-            logActivity(`${results.findings.length} finding(s) recorded — click DEFEND to apply countermeasures`, 'warning');
+            SecurityMonitor.log('', `${results.findings.length} finding(s) recorded — click DEFEND to apply countermeasures`, 'warning');
         } else {
-            logActivity('No actionable findings — system posture looks good', 'success');
+            SecurityMonitor.log('', 'No actionable findings — system posture looks good', 'success');
         }
-        logDivider();
+        SecurityMonitor.divider();
+
+        // Status & Logs tab — clean one-line summary
+        logActivity(
+            results.findings.length > 0
+                ? `Scan complete — ${results.findings.length} threat(s) detected  |  Threat level: ${threatLevel}`
+                : 'Scan complete — no threats detected',
+            summaryLevel, '', true);
 
         showNotification(
             `Scan complete | ${threatLevel} | ` +
@@ -3117,20 +3196,18 @@ function activateSmartDefense() {
     const hasScanData = scanResults && scanResults.completedAt;
 
     // ── Header ────────────────────────────────────────────────────
-    logDivider();
-    logActivity('KJER SMART DEFENSE — ' + new Date().toLocaleTimeString(), 'warning');
+    SecurityMonitor.clear();
+    SecurityMonitor.divider();
+    SecurityMonitor.section('KJER SMART DEFENSE — ' + new Date().toLocaleTimeString());
     if (hasScanData) {
         const age = Math.round((Date.now() - scanResults.completedAt) / 1000);
-        logActivity(
-            `Using scan from ${age}s ago | ` +
-            `${scanResults.critical} critical, ${scanResults.high} high findings`,
-            'info'
-        );
+        SecurityMonitor.log('', `Using scan from ${age}s ago  |  ${scanResults.critical} critical, ${scanResults.high} high findings`, 'info');
     } else {
-        logActivity('No recent scan — running broad defensive hardening', 'warning');
-        logActivity('Tip: Run SCAN first for targeted, finding-based defense', 'info');
+        SecurityMonitor.log('', 'No recent scan — running broad defensive hardening', 'warning');
+        SecurityMonitor.log('', 'Tip: Run SCAN first for targeted, finding-based defense', 'info');
+        logActivity('No recent scan data — running broad defensive hardening', 'warning');
     }
-    logDivider();
+    SecurityMonitor.divider();
 
     showNotification('Smart Defense activated — watch the Activity Monitor...');
     updateLastUpdateTime();
@@ -3386,16 +3463,21 @@ function activateSmartDefense() {
                     ? 'INCIDENT RESPONSE ACTIVE'
                     : 'HARDENED';
 
-        logDivider();
-        logActivity('DEFENSE COMPLETE', actionsTotal > 0 ? 'success' : 'warning', '', true);
-        logActivity(
-            `Actions taken: ${actionsTotal}  |  ` +
-            `Tools engaged: ${toolsEngaged.size}  |  ` +
-            `Posture: ${posture}`, actionsTotal > 0 ? 'success' : 'warning', '', true);
+        // Security Monitor — detailed per-run output
+        SecurityMonitor.divider();
+        SecurityMonitor.section('DEFENSE COMPLETE');
+        SecurityMonitor.log('', `Actions taken: ${actionsTotal}  |  Tools engaged: ${toolsEngaged.size}  |  Posture: ${posture}`, actionsTotal > 0 ? 'success' : 'warning');
         if (actionsTotal === 0) {
-            logActivity('Install defensive tools (UFW, Fail2ban, ClamAV, AppArmor) for automated response', 'warning');
+            SecurityMonitor.log('', 'Install defensive tools (UFW, Fail2ban, ClamAV, AppArmor) for automated response', 'warning');
         }
-        logDivider();
+        SecurityMonitor.divider();
+
+        // Status & Logs tab — clean one-line summary
+        logActivity(
+            actionsTotal > 0
+                ? `Defense complete — ${actionsTotal} action(s)  |  Posture: ${posture}`
+                : 'Defense complete — no defensive tools installed',
+            actionsTotal > 0 ? 'success' : 'warning', '', true);
 
         showNotification(
             `Defense complete — ${actionsTotal} action(s), ` +
@@ -3407,6 +3489,7 @@ function activateSmartDefense() {
 function clearActivityLog() {
     if (confirm('Clear all activity log entries?')) {
         ActivityLog.clear();
+        SecurityMonitor.clear();
         logActivity('Activity log cleared', 'info');
     }
 }
@@ -4209,60 +4292,10 @@ function generatePlainText(config) {
     return text;
 }
 
-// ==================== ACTIVITY LOGGING ====================
-
-function logActivity(message) {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('en-US', { hour12: true });
-    
-    // Determine log level
-    const level = message.includes('error') ? 'error' : 
-                 message.includes('success') || message.includes('completed') ? 'success' : 
-                 message.includes('warning') ? 'warning' : 'info';
-    
-    // Add to main log container if it exists (Status & Logs tab)
-    const logContainer = document.getElementById('activityLog');
-    if (logContainer && logContainer.parentElement.parentElement.offsetHeight > 0) {
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-        
-        logEntry.innerHTML = `
-            <span class="log-time">${timeString}</span>
-            <span class="log-level ${level}">${level.toUpperCase()}</span>
-            <span class="log-message">${message}</span>
-        `;
-        
-        logContainer.insertBefore(logEntry, logContainer.firstChild);
-        
-        // Keep only last 50 entries
-        while (logContainer.children.length > 50) {
-            logContainer.removeChild(logContainer.lastChild);
-        }
-    }
-    
-    // Add to dashboard activity log (filtered — meaningful events only)
-    const dashboardLog = document.getElementById('dashboardActivityLog');
-    if (dashboardLog && ActivityLog._isDashboardWorthy(message, level, false)) {
-        const logEntry = document.createElement('div');
-        logEntry.className = 'log-entry';
-
-        logEntry.innerHTML = `
-            <span class="log-time">${timeString}</span>
-            <span class="log-level ${level}">${level.toUpperCase()}</span>
-            <span class="log-message">${message}</span>
-        `;
-
-        dashboardLog.insertBefore(logEntry, dashboardLog.firstChild);
-
-        // Keep only last 10 entries for dashboard
-        while (dashboardLog.children.length > 10) {
-            dashboardLog.removeChild(dashboardLog.lastChild);
-        }
-    }
-    
-    // Log to console for debugging
-    console.log(`[${timeString}] ${message}`);
-}
+// ==================== ACTIVITY LOGGING (legacy DOM path) ====================
+// logActivity() is defined earlier and routes through ActivityLog → #activityLog.
+// This section intentionally left as a passthrough for console debugging only.
+// Do not redefine logActivity here.
 
 // ==================== NOTIFICATIONS ====================
 
