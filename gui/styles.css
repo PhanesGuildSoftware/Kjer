@@ -4,18 +4,18 @@
    ============================================ */
 
 :root {
-    --color-primary: #1a1a1a;
-    --color-primary-dark: #0d0d0d;
+    --color-primary: #f0f0f0;
+    --color-primary-dark: #e0e0e0;
     --color-secondary: #9D4EDD;
     --color-success: #9D4EDD;
     --color-warning: #9D4EDD;
     --color-danger: #ff4444;
     --color-info: #9D4EDD;
-    --color-bg-light: #0f0f0f;
-    --color-bg-white: #1a1a1a;
-    --color-text-dark: #B0E0E6;
-    --color-text-light: #B0E0E6;
-    --color-border: #2a2a2a;
+    --color-bg-light: #f5f5f5;
+    --color-bg-white: #ffffff;
+    --color-text-dark: #1a1a1a;
+    --color-text-light: #333333;
+    --color-border: #dddddd;
     --color-card-shadow: rgba(157, 78, 221, 0.12);
     
     --font-header: "Tomorrow", sans-serif;
@@ -34,7 +34,7 @@
 /* Page Header Style */
 .page-header {
     text-align: center;
-    color: #FFFFFF;
+    color: #1a1a1a;
     font-size: 28px;
     margin-bottom: 24px;
     letter-spacing: 1px;
@@ -44,12 +44,16 @@
 }
 
 body.dark-mode {
+    --color-primary: #1a1a1a;
+    --color-primary-dark: #0d0d0d;
     --color-bg-light: #0a0a0a;
-    --color-bg-white: #151515;
+    --color-bg-white: #1a1a1a;
     --color-text-dark: #B0E0E6;
     --color-text-light: #B0E0E6;
-    --color-border: #1f1f1f;
+    --color-border: #2a2a2a;
     --color-card-shadow: rgba(157, 78, 221, 0.18);
+    background: #333333;
+    color: #FFFFFF;
 }
 
 /* ==================== FONT DEFINITIONS ==================== */
@@ -98,8 +102,8 @@ body.dark-mode {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    /* SVGs ship dark — invert to white so they show on the dark sidebar/UI */
-    filter: brightness(0) invert(1);
+    /* SVGs ship dark — show dark on light bg by default (dark mode inverts to white) */
+    filter: brightness(0);
     opacity: 0.85;
 }
 
@@ -332,8 +336,8 @@ html, body {
 
 body {
     font-family: var(--font-body);
-    background: #333333;
-    color: #FFFFFF;
+    background: #f5f5f5;
+    color: #1a1a1a;
     line-height: 1.6;
     transition: var(--transition);
     font-size: 18px;
@@ -391,7 +395,7 @@ body::after {
 
 .logo-version {
     font-size: 10px;
-    color: #FFFFFF;
+    color: var(--color-text-dark);
     font-family: "Tomorrow", monospace;
     font-weight: 300;
     letter-spacing: 0.5px;
@@ -520,14 +524,14 @@ body::after {
 .tab-content h2 {
     font-size: 36px;
     margin-bottom: var(--spacing-lg);
-    color: #FFFFFF;
+    color: var(--color-text-dark);
     font-family: var(--font-header);
 }
 
 .tab-content h3 {
     font-size: 24px;
     margin-bottom: var(--spacing-md);
-    color: #FFFFFF;
+    color: var(--color-text-dark);
     font-family: var(--font-header);
 }
 
@@ -558,7 +562,7 @@ body::after {
 .card p {
     font-size: 16px;
     line-height: 1.6;
-    color: #FFFFFF;
+    color: var(--color-text-light);
 }
 
 .card:hover {
@@ -577,11 +581,11 @@ body::after {
 }
 
 .card .small {
-    color: #FFFFFF;
+    color: var(--color-text-light);
 }
 
 .card span {
-    color: #FFFFFF;
+    color: var(--color-text-dark);
 }
 
 .card.full-width {
@@ -700,20 +704,20 @@ body::after {
     padding: 4px 8px;
     font-size: 11px;
     background-color: transparent;
-    border: 1px solid #B0E0E6;
-    color: #B0E0E6;
+    border: 1px solid var(--color-text-dark);
+    color: var(--color-text-dark);
     cursor: pointer;
     border-radius: 4px;
     transition: all 0.2s ease;
 }
 
 .btn-small:hover {
-    background-color: rgba(176, 224, 230, 0.1);
+    background-color: rgba(0, 0, 0, 0.08);
 }
 
 .activity-log-container {
-    background-color: rgba(0, 0, 0, 0.3);
-    border: 1px solid #B0E0E6;
+    background-color: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
     max-height: 500px;
     overflow: hidden;
@@ -727,10 +731,10 @@ body::after {
     grid-template-columns: 80px 60px 1fr;
     gap: 12px;
     padding: 12px;
-    background-color: rgba(176, 224, 230, 0.08);
-    border-bottom: 2px solid #B0E0E6;
+    background-color: rgba(157, 78, 221, 0.06);
+    border-bottom: 2px solid var(--color-border);
     font-weight: bold;
-    color: #B0E0E6;
+    color: var(--color-text-dark);
     font-size: 13px;
     position: sticky;
     top: 0;
@@ -778,7 +782,7 @@ body::after {
 
 .log-col-time {
     font-family: 'Courier New', monospace;
-    color: #B0E0E6;
+    color: var(--color-text-dark);
     font-size: 12px;
     font-weight: 500;
 }
@@ -792,7 +796,7 @@ body::after {
 }
 
 .log-col-message {
-    color: #B0E0E6;
+    color: var(--color-text-dark);
     font-size: 13px;
     word-break: break-word;
 }
@@ -1118,14 +1122,14 @@ body::after {
 .profile-description {
     font-size: 15px;
     line-height: 1.6;
-    color: #FFFFFF;
+    color: var(--color-text-light);
     margin-bottom: var(--spacing-md);
 }
 
 .profile-tools {
     font-size: 14px;
     line-height: 1.5;
-    color: #FFFFFF;
+    color: var(--color-text-light);
     margin-bottom: var(--spacing-md);
 }
 
@@ -1172,7 +1176,7 @@ body::after {
     font-size: 13px;
     font-weight: 600;
     margin-bottom: var(--spacing-sm);
-    color: #B0E0E6;
+    color: var(--color-text-dark);
 }
 
 .progress-bar {
@@ -1192,7 +1196,7 @@ body::after {
 .metric-value {
     font-size: 14px;
     font-weight: 600;
-    color: white;
+    color: var(--color-text-dark);
     text-shadow: none;
 }
 
@@ -1481,8 +1485,8 @@ body::after {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background-color: #1a1a1a;
-    color: #B0E0E6;
+    background-color: var(--color-bg-white);
+    color: var(--color-text-dark);
     padding: var(--spacing-lg);
     border-radius: var(--border-radius);
     box-shadow: 0 4px 12px rgba(157, 78, 221, 0.2);
@@ -1668,7 +1672,7 @@ body::after {
 
 .modal-header h2 {
     margin: 0;
-    color: #B0E0E6;
+    color: var(--color-text-dark);
     font-size: 24px;
 }
 
@@ -1676,7 +1680,7 @@ body::after {
     background: none;
     border: none;
     font-size: 32px;
-    color: #B0E0E6;
+    color: var(--color-text-dark);
     cursor: pointer;
     padding: 0;
     width: 32px;
@@ -1694,7 +1698,7 @@ body::after {
     padding: var(--spacing-lg);
     flex: 1;
     overflow-y: auto;
-    color: #B0E0E6;
+    color: var(--color-text-dark);
     font-size: 16px;
     line-height: 1.6;
 }
@@ -1772,4 +1776,74 @@ body::after {
     color: #888;
     display: block;
     font-size: 11px;
+}
+
+/* ==================== DARK MODE ELEMENT OVERRIDES ==================== */
+
+body.dark-mode .page-header {
+    color: #FFFFFF;
+}
+
+body.dark-mode .logo-version {
+    color: #FFFFFF;
+}
+
+body.dark-mode .tab-content h2,
+body.dark-mode .tab-content h3 {
+    color: #FFFFFF;
+}
+
+body.dark-mode .card p,
+body.dark-mode .card .small,
+body.dark-mode .card span {
+    color: #FFFFFF;
+}
+
+body.dark-mode .profile-description,
+body.dark-mode .profile-tools {
+    color: #FFFFFF;
+}
+
+body.dark-mode .metric-value {
+    color: #FFFFFF;
+}
+
+body.dark-mode .activity-log-container {
+    background-color: rgba(0, 0, 0, 0.3);
+    border: 1px solid #B0E0E6;
+}
+
+body.dark-mode .log-header {
+    background-color: rgba(176, 224, 230, 0.08);
+    border-bottom: 2px solid #B0E0E6;
+    color: #B0E0E6;
+}
+
+body.dark-mode .btn-small {
+    border-color: #B0E0E6;
+    color: #B0E0E6;
+}
+
+body.dark-mode .btn-small:hover {
+    background-color: rgba(176, 224, 230, 0.1);
+}
+
+body.dark-mode .log-col-time,
+body.dark-mode .log-col-message {
+    color: #B0E0E6;
+}
+
+body.dark-mode .metric-label {
+    color: #B0E0E6;
+}
+
+body.dark-mode .modal-header h2,
+body.dark-mode .modal-close,
+body.dark-mode .modal-body {
+    color: #B0E0E6;
+}
+
+body.dark-mode .icon {
+    filter: brightness(0) invert(1);
+    opacity: 0.85;
 }
