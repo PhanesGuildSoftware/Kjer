@@ -1837,13 +1837,13 @@ body {
 /* ==================== DARK MODE ELEMENT OVERRIDES ==================== */
 
 body.dark-mode .page-header {
-    color: #FFFFFF;
+    color: #B0E0E6;
 }
 
 body.dark-mode .sidebar {
-    background: rgba(176, 224, 230, 0.30);
-    border-right: 1px solid rgba(176, 224, 230, 0.45);
-    box-shadow: 2px 0 20px rgba(157, 78, 221, 0.20);
+    background: rgba(157, 78, 221, 0.30);
+    border-right: 1px solid rgba(157, 78, 221, 0.45);
+    box-shadow: 2px 0 20px rgba(176, 224, 230, 0.20);
 }
 
 body.dark-mode .nav-item {
@@ -1865,8 +1865,8 @@ body.dark-mode .nav-item.active .icon {
 }
 
 body.dark-mode .card {
-    background: rgba(176, 224, 230, 0.22);
-    border: 1px solid rgba(176, 224, 230, 0.38);
+    background: rgba(157, 78, 221, 0.22);
+    border: 1px solid rgba(157, 78, 221, 0.38);
 }
 
 body.dark-mode .logo-version {
@@ -1875,7 +1875,7 @@ body.dark-mode .logo-version {
 
 body.dark-mode .tab-content h2,
 body.dark-mode .tab-content h3 {
-    color: #9D4EDD;
+    color: #B0E0E6;
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
@@ -1920,12 +1920,12 @@ body.dark-mode .metric-value {
 }
 
 body.dark-mode .activity-log-container {
-    background-color: rgba(0, 0, 0, 0.3);
-    border: 1px solid #B0E0E6;
+    background-color: rgba(157, 78, 221, 0.12);
+    border: 1px solid rgba(157, 78, 221, 0.45);
 }
 
 body.dark-mode .log-header {
-    background-color: rgba(176, 224, 230, 0.08);
+    background-color: rgba(157, 78, 221, 0.08);
     border-bottom: 2px solid #B0E0E6;
     color: #B0E0E6;
 }
