@@ -1979,6 +1979,10 @@ body.dark-mode .log-entry {
     color: #FFFFFF;
 }
 
+body.dark-mode .activity-header h3 {
+    color: #B0E0E6;
+}
+
 body.dark-mode .metric-label {
     color: #DDDDDD;
 }
