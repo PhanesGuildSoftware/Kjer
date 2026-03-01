@@ -1486,7 +1486,7 @@ const SecurityMonitor = {
         if (!logEntries) return;
 
         if (this.entries.length === 0) {
-            logEntries.innerHTML = '<div style="text-align:center;color:#555;padding:32px 0;font-size:13px;">Run a Security Scan or Smart Defense to see activity here.</div>';
+            logEntries.innerHTML = '<div style="text-align:center;color:var(--color-text-light);padding:32px 0;font-size:13px;">Run a Security Scan or Smart Defense to see activity here.</div>';
             return;
         }
 
