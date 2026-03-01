@@ -3644,6 +3644,12 @@ function createToolCard(tool, isInitialized = true) {
     const depsText = deps.length > 0 ? `<div style="font-size: 11px; color: var(--color-text-light); margin-top: 4px;"><strong>Dependencies:</strong> ${deps.join(', ')}</div>` : '';
     const uniqueId = `tool-details-${tool.name.toLowerCase().replace(/\s+/g, '-')}`;
     
+    // Checkbox for bulk install — only for available, compatible, initialized tools
+    const showCheckbox = isInitialized && !isInstalled && !tool.isIncompatible;
+    const checkboxHtml = showCheckbox
+        ? `<input type="checkbox" class="tool-select-checkbox" data-tool-name="${tool.name}" onchange="updateMultiInstallBar()" title="Select for bulk install">`
+        : '';
+    
     // Indicate Linux-specific tools
     let osIndicator = '';
     if (tool.osCompatibility && tool.osCompatibility.length > 0) {
@@ -3673,6 +3679,7 @@ function createToolCard(tool, isInitialized = true) {
     const buttonCursor = !isInitialized ? 'cursor: not-allowed;' : 'cursor: pointer;';
     
     card.innerHTML = `
+        ${checkboxHtml}
         <div ${cardOpacity}>
         <div class="tool-icon">${tool.icon}</div>
         <div class="tool-name">${tool.name}${osIndicator}</div>
@@ -3929,7 +3936,7 @@ function filterToolsByTop(count) {
     });
 }
 
-async function installTool(toolName) {
+async function installTool(toolName, skipRender = false) {
     const installed = getInstalledTools();
     const isInstalled = toolName in installed;
     
@@ -3966,7 +3973,47 @@ async function installTool(toolName) {
     }
     
     // Refresh the current view
+    if (!skipRender) renderToolsList();
+}
+
+function updateMultiInstallBar() {
+    const checked = document.querySelectorAll('.tool-select-checkbox:checked');
+    const total   = document.querySelectorAll('.tool-select-checkbox');
+    const btn     = document.getElementById('installSelectedBtn');
+    const counter = document.getElementById('selectedToolsCount');
+    const selAll  = document.getElementById('selectAllTools');
+    if (counter) counter.textContent = `${checked.length} selected`;
+    if (btn) btn.disabled = checked.length === 0;
+    if (selAll) {
+        selAll.indeterminate = checked.length > 0 && checked.length < total.length;
+        selAll.checked = total.length > 0 && checked.length === total.length;
+    }
+}
+
+function toggleSelectAll(checkbox) {
+    document.querySelectorAll('.tool-select-checkbox').forEach(cb => {
+        cb.checked = checkbox.checked;
+    });
+    updateMultiInstallBar();
+}
+
+async function installSelectedTools() {
+    const checkboxes = Array.from(document.querySelectorAll('.tool-select-checkbox:checked'));
+    if (checkboxes.length === 0) return;
+    const names = checkboxes.map(cb => cb.dataset.toolName);
+    const btn = document.getElementById('installSelectedBtn');
+    if (btn) { btn.disabled = true; btn.textContent = `Installing (0/${names.length})…`; }
+    logActivity(`Bulk install started: ${names.join(', ')}`, 'info', '', true);
+    let done = 0;
+    for (const name of names) {
+        if (btn) btn.textContent = `Installing (${done}/${names.length})…`;
+        await installTool(name, true);
+        done++;
+    }
+    // Final re-render and reset
     renderToolsList();
+    logActivity(`Bulk install complete — ${done} tool(s) processed`, 'success', '', true);
+    showNotification(`Bulk install complete: ${done} tool(s) processed.`);
 }
 
 function viewToolDetails(toolName) {

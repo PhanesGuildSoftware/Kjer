@@ -117,6 +117,16 @@
                         <button class="filter-btn" onclick="filterToolsByTop(5)">Top 5</button>
                         <button class="filter-btn" onclick="filterToolsByTop(20)">Top 20</button>
                     </div>
+                    <div class="multi-install-bar" id="multiInstallBar">
+                        <label class="select-all-label">
+                            <input type="checkbox" id="selectAllTools" onchange="toggleSelectAll(this)">
+                            Select All
+                        </label>
+                        <span id="selectedToolsCount" class="selected-count">0 selected</span>
+                        <button class="btn btn-primary btn-small" id="installSelectedBtn" onclick="installSelectedTools()" disabled style="margin-left:auto;">
+                            <i class="icon icon-download"></i> Install Selected
+                        </button>
+                    </div>
                     <div class="search-bar">
                         <input type="text" id="toolSearch" placeholder="Search tools..." 
                                oninput="filterTools(this.value)" class="search-input">
