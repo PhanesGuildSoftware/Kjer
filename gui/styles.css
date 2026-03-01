@@ -1972,8 +1972,11 @@ body.dark-mode .read-more-link:hover {
 }
 
 body.dark-mode .log-col-time,
-body.dark-mode .log-col-message {
-    color: #B0E0E6;
+body.dark-mode .log-col-message,
+body.dark-mode .log-time,
+body.dark-mode .log-message,
+body.dark-mode .log-entry {
+    color: #FFFFFF;
 }
 
 body.dark-mode .metric-label {
