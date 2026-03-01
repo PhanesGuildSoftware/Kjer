@@ -3625,6 +3625,7 @@ function renderToolsList() {
         const toolCard = createToolCard(tool, isInitialized);
         toolsList.appendChild(toolCard);
     });
+    updateMultiInstallBar?.();
 }
 
 function createToolCard(tool, isInitialized = true) {
@@ -3644,8 +3645,9 @@ function createToolCard(tool, isInitialized = true) {
     const depsText = deps.length > 0 ? `<div style="font-size: 11px; color: var(--color-text-light); margin-top: 4px;"><strong>Dependencies:</strong> ${deps.join(', ')}</div>` : '';
     const uniqueId = `tool-details-${tool.name.toLowerCase().replace(/\s+/g, '-')}`;
     
-    // Checkbox for bulk install — only for available, compatible, initialized tools
-    const showCheckbox = isInitialized && !isInstalled && !tool.isIncompatible;
+    // Checkbox for bulk install — only for available, compatible tools
+    // (shown even if not yet initialized; Install Selected button is disabled then)
+    const showCheckbox = !isInstalled && !tool.isIncompatible;
     const checkboxHtml = showCheckbox
         ? `<input type="checkbox" class="tool-select-checkbox" data-tool-name="${tool.name}" onchange="updateMultiInstallBar()" title="Select for bulk install">`
         : '';
@@ -3869,38 +3871,34 @@ function filterTools(searchTerm = '') {
 function filterToolsByStatus(status) {
     const isInitialized = localStorage.getItem('kterInitialized') === 'true';
     const toolsList = document.getElementById('toolsList');
-    
-    // Block 'installed' and 'available' filters if not initialized
-    if (!isInitialized && (status === 'installed' || status === 'available')) {
-        toolsList.innerHTML = '<p style="text-align: center; color: #B0E0E6; padding: 40px; margin-top: 150px; margin-left: 100px;">Please initialize Kjer to use filters</p>';
-        return;
-    }
-    
+
     // Update active button
     document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
-    
+
     toolsList.innerHTML = '';
-    
+
     const installed = getInstalledTools();
-    let filteredTools = Object.entries(TOOLS_DATABASE);
-    
+    // Use the OS-filtered set (same as renderToolsList) so results are consistent
+    let filteredTools = Object.entries(getToolsForCurrentOS());
+
     if (status === 'installed') {
-        filteredTools = filteredTools.filter(([key, tool]) => key in installed);
+        filteredTools = filteredTools.filter(([key, tool]) => tool.name in installed);
     } else if (status === 'available') {
-        filteredTools = filteredTools.filter(([key, tool]) => !(key in installed));
+        filteredTools = filteredTools.filter(([key, tool]) => !(tool.name in installed));
     }
-    
+
     if (filteredTools.length === 0) {
-        const statusText = status === 'installed' ? 'No installed tools' : 'No available tools';
-        toolsList.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--color-text-light);">${statusText}.</p>`;
+        const statusText = status === 'installed' ? 'No tools installed yet.' : 'No available tools.';
+        toolsList.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--color-text-light);">${statusText}</p>`;
         return;
     }
-    
+
     filteredTools.forEach(([key, tool]) => {
         const toolCard = createToolCard(tool, isInitialized);
         toolsList.appendChild(toolCard);
     });
+    updateMultiInstallBar();
 }
 
 function filterToolsByTop(count) {
@@ -3998,6 +3996,11 @@ function toggleSelectAll(checkbox) {
 }
 
 async function installSelectedTools() {
+    const isInitialized = localStorage.getItem('kterInitialized') === 'true';
+    if (!isInitialized) {
+        showNotification('Initialize Kjer first before installing tools.');
+        return;
+    }
     const checkboxes = Array.from(document.querySelectorAll('.tool-select-checkbox:checked'));
     if (checkboxes.length === 0) return;
     const names = checkboxes.map(cb => cb.dataset.toolName);
