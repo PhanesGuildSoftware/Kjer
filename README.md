@@ -144,8 +144,11 @@ kjer --list
 | 📊 **Report Wizard** | Export scan + defense results as PDF, HTML, Markdown, or plain text |
 | 🔬 **Compliance Audit** | Lynis, CIS-CAT, osquery, auditd, TIGER — gaps surfaced with actionable hardening steps |
 | 🧬 **Chkrootkit False-Positive Detection** | Identify promiscuous mode (IDS/sniffer) as root cause; cross-verify with debsums + rkhunter |
-| 🗄️ **AIDE Auto-Init** | Defend auto-initializes the AIDE integrity database when it doesn't exist |
+| 🗄️ **AIDE Auto-Init** | Defend auto-initializes the AIDE integrity database when it doesn't exist; live `changed/added/removed` parse when DB exists |
 | 🌍 **Vuln Scanner Service Management** | GVM, OpenVAS, Nessus services auto-started by Defend when found stopped/failed |
+| 📐 **Sequential Phase Engine** | Scan and Defend phases execute strictly in order — no result ever appears under the wrong phase header |
+| 🎯 **Accurate Severity Levels** | All backend hardening steps return `success / warning / error` based on real command exit codes |
+| 💻 **CLI v1.1** | 7-phase scan output with phase headers, backend-driven defend with real hardening summaries, `--about` updated |
 
 ---
 

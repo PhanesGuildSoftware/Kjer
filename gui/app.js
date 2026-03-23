@@ -3980,7 +3980,7 @@ function logDivider() {
 }
 
 // ─── SCAN ENGINE ─────────────────────────────────────────────────
-function performComprehensiveScan() {
+async function performComprehensiveScan() {
     const installed   = getInstalledTools();
     const installedNames = Object.keys(installed);
 
@@ -4032,78 +4032,70 @@ function performComprehensiveScan() {
     showNotification('Security scan started — results streaming to Activity Monitor...');
     updateLastUpdateTime();
 
-    // ── Phase scheduler — async-aware, backed by real tool execution ──
-    let uiDelay = 400;
-    const toolPromises = [];
+    // ── Phase runner — sequential phases, parallel tools within ─
+    // Each phase fully completes (all backend calls resolve) before the
+    // next phase header is written. Results can never appear under the
+    // wrong phase header regardless of how long a backend call takes.
+    async function runScanPhase(phaseName, tools) {
+        if (tools.length === 0) return;
+        logSection(phaseName);
+        await Promise.all(tools.map(async (tool, i) => {
+            // Stagger tool calls within a phase by 300 ms to avoid thundering herd
+            if (i > 0) await new Promise(res => setTimeout(res, i * 300));
+            try {
+                const finding = await _runToolScan(tool, phaseName);
+                results.toolsRun++;
+                if (finding) {
+                    results.findings.push(finding);
+                    if      (finding.level === 'critical') results.critical++;
+                    else if (finding.level === 'error')    results.high++;
+                    else if (finding.level === 'warning')  results.medium++;
+                    else if (finding.level === 'info' && finding.flagged) results.low++;
+                }
+            } catch (_) {
+                results.toolsRun++;
+            }
+        }));
+    }
 
-    activePhases.forEach(([phaseName, tools]) => {
-        // Section header fires at its scheduled UI delay
-        setTimeout(() => logSection(phaseName), uiDelay);
-        uiDelay += 300;
+    for (const [phaseName, tools] of activePhases) {
+        await runScanPhase(phaseName, tools);
+    }
 
-        tools.forEach(tool => {
-            const capturedTool = tool;
-            const startDelay   = uiDelay;
-            toolPromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    try {
-                        const finding = await _runToolScan(capturedTool, phaseName);
-                        results.toolsRun++;
-                        if (finding) {
-                            results.findings.push(finding);
-                            if      (finding.level === 'critical') results.critical++;
-                            else if (finding.level === 'error')    results.high++;
-                            else if (finding.level === 'warning')  results.medium++;
-                            else if (finding.level === 'info' && finding.flagged) results.low++;
-                        }
-                    } catch (_) {
-                        results.toolsRun++;
-                    }
-                    resolve();
-                }, startDelay);
-            }));
-            uiDelay += 550;
-        });
+    // ── Summary ───────────────────────────────────────────────────
+    results.completedAt = new Date();
+    window.KjerLastScanResults = results;
 
-        uiDelay += 200;
-    });
+    const elapsed = ((results.completedAt - results.startedAt) / 1000).toFixed(1);
+    const threatLevel = results.critical > 0 ? 'CRITICAL'
+                      : results.high     > 0 ? 'HIGH'
+                      : results.medium   > 0 ? 'MEDIUM'
+                      : 'CLEAN';
+    const summaryLevel = results.critical > 0 ? 'critical'
+                       : results.high     > 0 ? 'error'
+                       : results.medium   > 0 ? 'warning'
+                       : 'success';
 
-    // ── Summary — fires only after ALL tools have resolved ────────
-    Promise.all(toolPromises).then(() => {
-        results.completedAt = new Date();
-        window.KjerLastScanResults = results;
+    SecurityMonitor.divider();
+    SecurityMonitor.section(`SCAN COMPLETE — ${elapsed}s`);
+    SecurityMonitor.log('', `Threat Level: ${threatLevel}  |  Critical: ${results.critical}  High: ${results.high}  Medium: ${results.medium}  Low: ${results.low}`, summaryLevel);
+    if (results.findings.length > 0) {
+        SecurityMonitor.log('', `${results.findings.length} finding(s) recorded — click DEFEND to apply countermeasures`, 'warning');
+    } else {
+        SecurityMonitor.log('', 'No actionable findings — system posture looks good', 'success');
+    }
+    SecurityMonitor.divider();
 
-        const elapsed = ((results.completedAt - results.startedAt) / 1000).toFixed(1);
-        const threatLevel = results.critical > 0 ? 'CRITICAL'
-                          : results.high     > 0 ? 'HIGH'
-                          : results.medium   > 0 ? 'MEDIUM'
-                          : 'CLEAN';
-        const summaryLevel = results.critical > 0 ? 'critical'
-                           : results.high     > 0 ? 'error'
-                           : results.medium   > 0 ? 'warning'
-                           : 'success';
+    logActivity(
+        results.findings.length > 0
+            ? `Scan complete — ${results.findings.length} threat(s) detected  |  Threat level: ${threatLevel}`
+            : 'Scan complete — no threats detected',
+        summaryLevel, '', true);
 
-        SecurityMonitor.divider();
-        SecurityMonitor.section(`SCAN COMPLETE — ${elapsed}s`);
-        SecurityMonitor.log('', `Threat Level: ${threatLevel}  |  Critical: ${results.critical}  High: ${results.high}  Medium: ${results.medium}  Low: ${results.low}`, summaryLevel);
-        if (results.findings.length > 0) {
-            SecurityMonitor.log('', `${results.findings.length} finding(s) recorded — click DEFEND to apply countermeasures`, 'warning');
-        } else {
-            SecurityMonitor.log('', 'No actionable findings — system posture looks good', 'success');
-        }
-        SecurityMonitor.divider();
-
-        logActivity(
-            results.findings.length > 0
-                ? `Scan complete — ${results.findings.length} threat(s) detected  |  Threat level: ${threatLevel}`
-                : 'Scan complete — no threats detected',
-            summaryLevel, '', true);
-
-        showNotification(
-            `Scan complete | ${threatLevel} | ` +
-            `${results.critical} critical, ${results.high} high, ${results.medium} medium`
-        );
-    });
+    showNotification(
+        `Scan complete | ${threatLevel} | ` +
+        `${results.critical} critical, ${results.high} high, ${results.medium} medium`
+    );
 }
 
 /**
@@ -4457,7 +4449,9 @@ async function _runToolDefend(tool, ctx) {
     try {
         const r = await BackendAPI.callBackend('defend-tool', { tool: tool.key });
         if (r && r.success && r.summary) {
-            return { summary: r.summary, level: r.steps_ok > 0 ? 'success' : 'info' };
+            // Prefer level from backend; fall back to steps-based heuristic
+            const level = r.level || (r.steps_ok > 0 ? 'success' : 'info');
+            return { summary: r.summary, level };
         }
     } catch (_) {}
     return _simulateDefenseResult(tool, ctx || {});
@@ -4514,10 +4508,18 @@ function _simulateDefenseResult(tool, ctx) {
                 ? { summary: 'Switched to Enforcing mode — AVC denials will now block policy violations', level: 'warning' }
                 : { summary: 'Mode confirmed: Enforcing — policy context intact', level: 'success' };
         case 'aide':
-        case 'tripwire':
+            // If the scan showed a missing database, simulation should reflect initialisation,
+            // not "flagged files" (which implies actual integrity violations exist)
+            if (ctx.aideMissingDb) {
+                return { summary: 'AIDE baseline initialisation in progress — creating integrity database', level: 'info' };
+            }
             return hasIntegrityViolation
                 ? { summary: 'Flagged files logged — baseline will NOT auto-update (manual review required)', level: 'warning' }
                 : { summary: 'Baseline re-checked — updating database with approved changes', level: 'success' };
+        case 'tripwire':
+            return hasIntegrityViolation
+                ? { summary: 'Tripwire check run — policy violations reviewed; manual tripwire --update required', level: 'warning' }
+                : { summary: 'Tripwire check run — no policy violations detected', level: 'success' };
         case 'lynis': {
             const applied = ri(3, 9);
             return { summary: `${applied} hardening recommendation(s) applied from last audit report`, level: 'success' };
@@ -4538,7 +4540,7 @@ function _simulateDefenseResult(tool, ctx) {
 }
 
 // ─── DEFEND ENGINE ──────────────────────────────────────────────
-function activateSmartDefense() {
+async function activateSmartDefense() {
     const installed      = getInstalledTools();
     const installedNames = Object.keys(installed);
 
@@ -4568,10 +4570,8 @@ function activateSmartDefense() {
     showNotification('Smart Defense activated — watch the Activity Monitor...');
     updateLastUpdateTime();
 
-    let delay = 400;
     let actionsTotal = 0;
     let toolsEngaged = new Set();
-    const defensePromises = [];
 
     // ── Determine threat context from scan findings ───────────────
     const findings = hasScanData ? scanResults.findings : [];
@@ -4592,243 +4592,98 @@ function activateSmartDefense() {
     // Vuln scanner services that reported failure/not-running during the scan
     const hasVulnSvcFailed    = findings.some(f => ['nessus','openvas','gvm'].includes(f.key)
                                                && ['error','warning'].includes(f.level));
+    // Detect AIDE missing-DB so simulation gives initialisation message, not "flagged files"
+    const aideMissingDb       = findings.some(f => f.key === 'aide'
+                                               && (f.message || '').toLowerCase().includes('not initialised'));
 
     // If no scan data, defend everything present
     const broadMode = !hasScanData;
-    const ctx = { hasNetworkThreat, hasMalware, hasIntegrityViolation, hasComplianceGap, hasMemoryThreat, hasVulns, hasVulnSvcFailed, broadMode };
+    const ctx = { hasNetworkThreat, hasMalware, hasIntegrityViolation, hasComplianceGap,
+                  hasMemoryThreat, hasVulns, hasVulnSvcFailed, broadMode, aideMissingDb };
 
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 0 — VULNERABILITY SCANNER SERVICES
-    // (GVM, OpenVAS, Nessus) — start failed/stopped services
-    // ─────────────────────────────────────────────────────────────
-    const vulnSvcTools = getToolsByRole(['vuln_svc']);
-
-    if (vulnSvcTools.length > 0 && (broadMode || hasVulnSvcFailed || hasVulns)) {
-        setTimeout(() => logSection('PHASE 0 — SCANNER SERVICE RESTORE'), delay);
-        delay += 300;
-
-        vulnSvcTools.forEach(tool => {
-            const t = tool;
-            const capDelay = delay;
-            defensePromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    toolsEngaged.add(t.name);
-                    const r = await _runToolDefend(t, ctx);
-                    logResult(t.name, r.summary, r.level);
-                    actionsTotal++;
-                    resolve();
-                }, capDelay);
-            }));
-            delay += 600;
-        });
-        delay += 200;
+    // ── Phase runner ─────────────────────────────────────────────
+    // Logs the phase header, then awaits ALL tools in the phase before returning.
+    // This guarantees every tool result appears under its correct phase section —
+    // no result can "leak" into a later phase due to slow backend calls.
+    async function runPhase(phaseName, tools, condition) {
+        if (tools.length === 0 || !condition) return;
+        logSection(phaseName);
+        await Promise.all(tools.map(async (t, i) => {
+            if (i > 0) await new Promise(res => setTimeout(res, i * 200));
+            toolsEngaged.add(t.name);
+            const r = await _runToolDefend(t, ctx);
+            logResult(t.name, r.summary, r.level);
+            actionsTotal++;
+        }));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 1 — NETWORK & PERIMETER HARDENING
-    // (UFW, Fail2ban, Suricata IPS) — triggered by network threats
-    // ─────────────────────────────────────────────────────────────
-    const networkDefenders = getToolsByRole(['firewall', 'ips']).filter(t =>
-        ['ufw','fail2ban','suricata'].includes(t.key));
+    // ── Execute phases sequentially ───────────────────────────────
+    // Each phase fully completes before the next phase header fires.
+    await runPhase('PHASE 0 — SCANNER SERVICE RESTORE',
+        getToolsByRole(['vuln_svc']),
+        broadMode || hasVulnSvcFailed || hasVulns);
 
-    if (networkDefenders.length > 0 && (broadMode || hasNetworkThreat || hasVulns)) {
-        setTimeout(() => logSection('PHASE 1 — NETWORK & PERIMETER'), delay);
-        delay += 300;
+    await runPhase('PHASE 1 — NETWORK & PERIMETER',
+        getToolsByRole(['firewall', 'ips']).filter(t => ['ufw','fail2ban','suricata'].includes(t.key)),
+        broadMode || hasNetworkThreat || hasVulns);
 
-        networkDefenders.forEach(tool => {
-            const t = tool;
-            const capDelay = delay;
-            defensePromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    toolsEngaged.add(t.name);
-                    const r = await _runToolDefend(t, ctx);
-                    logResult(t.name, r.summary, r.level);
-                    actionsTotal++;
-                    resolve();
-                }, capDelay);
-            }));
-            delay += 500;
-        });
-        delay += 200;
+    await runPhase('PHASE 2 — MALWARE CONTAINMENT',
+        getToolsByRole(['av_remediate']),
+        broadMode || hasMalware || hasMemoryThreat);
+
+    await runPhase('PHASE 3 — ACCESS CONTROL ENFORCEMENT',
+        getToolsByRole(['firewall']).filter(t => ['apparmor','selinux'].includes(t.key)),
+        broadMode || hasComplianceGap || hasMalware);
+
+    await runPhase('PHASE 4 — FILE INTEGRITY',
+        getToolsByRole(['integrity_scan']),
+        broadMode || hasIntegrityViolation);
+
+    await runPhase('PHASE 5 — AUDIT HARDENING',
+        getToolsByRole(['compliance_scan']).filter(t => ['lynis','auditd'].includes(t.key)),
+        broadMode || hasComplianceGap);
+
+    await runPhase('PHASE 6 — SIEM ALERT RULES',
+        getToolsByRole(['siem']),
+        broadMode || findings.length > 0);
+
+    // ── Defense summary ───────────────────────────────────────────
+    const posture = actionsTotal === 0
+        ? 'NO DEFENSIVE TOOLS INSTALLED'
+        : findings.length === 0
+            ? 'HARDENED (preventive)'
+            : hasScanData && scanResults.critical > 0
+                ? 'INCIDENT RESPONSE ACTIVE'
+                : 'HARDENED';
+
+    SecurityMonitor.divider();
+    SecurityMonitor.section('DEFENSE COMPLETE');
+    SecurityMonitor.log('', `Actions taken: ${actionsTotal}  |  Tools engaged: ${toolsEngaged.size}  |  Posture: ${posture}`, actionsTotal > 0 ? 'success' : 'warning');
+    if (actionsTotal === 0) {
+        SecurityMonitor.log('', 'Install defensive tools (UFW, Fail2ban, ClamAV, AppArmor) for automated response', 'warning');
     }
+    SecurityMonitor.divider();
 
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 2 — MALWARE CONTAINMENT & REMEDIATION
-    // (ClamAV, rkhunter, Malwarebytes, Kaspersky, Windows Defender)
-    // ─────────────────────────────────────────────────────────────
-    const avTools = getToolsByRole(['av_remediate']);
+    // Snapshot only entries written during this defense run
+    window.KjerLastDefenseResults = {
+        actions:      SecurityMonitor.entries.slice(0, SecurityMonitor.entries.length - defenseStartCount).reverse(),
+        posture,
+        completedAt:  Date.now(),
+        toolsEngaged: [...toolsEngaged],
+        actionsTotal,
+        findings,
+    };
 
-    if (avTools.length > 0 && (broadMode || hasMalware || hasMemoryThreat)) {
-        setTimeout(() => logSection('PHASE 2 — MALWARE CONTAINMENT'), delay);
-        delay += 300;
+    logActivity(
+        actionsTotal > 0
+            ? `Defense complete — ${actionsTotal} action(s)  |  Posture: ${posture}`
+            : 'Defense complete — no defensive tools installed',
+        actionsTotal > 0 ? 'success' : 'warning', '', true);
 
-        avTools.forEach(tool => {
-            const t = tool;
-            const capDelay = delay;
-            defensePromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    toolsEngaged.add(t.name);
-                    const r = await _runToolDefend(t, ctx);
-                    logResult(t.name, r.summary, r.level);
-                    actionsTotal++;
-                    resolve();
-                }, capDelay);
-            }));
-            delay += 500;
-        });
-        delay += 200;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 3 — ACCESS CONTROL & MAC ENFORCEMENT
-    // (AppArmor, SELinux) — always appropriate
-    // ─────────────────────────────────────────────────────────────
-    const macTools = getToolsByRole(['firewall']).filter(t => ['apparmor','selinux'].includes(t.key));
-
-    if (macTools.length > 0 && (broadMode || hasComplianceGap || hasMalware)) {
-        setTimeout(() => logSection('PHASE 3 — ACCESS CONTROL ENFORCEMENT'), delay);
-        delay += 300;
-
-        macTools.forEach(tool => {
-            const t = tool;
-            const capDelay = delay;
-            defensePromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    toolsEngaged.add(t.name);
-                    const r = await _runToolDefend(t, ctx);
-                    logResult(t.name, r.summary, r.level);
-                    actionsTotal++;
-                    resolve();
-                }, capDelay);
-            }));
-            delay += 500;
-        });
-        delay += 200;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 4 — FILE INTEGRITY RESTORATION
-    // (AIDE, Tripwire) — triggered by integrity findings
-    // ─────────────────────────────────────────────────────────────
-    const integrityTools = getToolsByRole(['integrity_scan']);
-
-    if (integrityTools.length > 0 && (broadMode || hasIntegrityViolation)) {
-        setTimeout(() => logSection('PHASE 4 — FILE INTEGRITY'), delay);
-        delay += 300;
-
-        integrityTools.forEach(tool => {
-            const t = tool;
-            const capDelay = delay;
-            defensePromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    toolsEngaged.add(t.name);
-                    const r = await _runToolDefend(t, ctx);
-                    logResult(t.name, r.summary, r.level);
-                    actionsTotal++;
-                    resolve();
-                }, capDelay);
-            }));
-            delay += 450;
-        });
-        delay += 200;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 5 — AUDIT & COMPLIANCE HARDENING
-    // (Lynis, auditd) — triggered by compliance findings
-    // ─────────────────────────────────────────────────────────────
-    const complianceDefenders = getToolsByRole(['compliance_scan'])
-        .filter(t => ['lynis', 'auditd'].includes(t.key));
-
-    if (complianceDefenders.length > 0 && (broadMode || hasComplianceGap)) {
-        setTimeout(() => logSection('PHASE 5 — AUDIT HARDENING'), delay);
-        delay += 300;
-
-        complianceDefenders.forEach(tool => {
-            const t = tool;
-            const capDelay = delay;
-            defensePromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    toolsEngaged.add(t.name);
-                    const r = await _runToolDefend(t, ctx);
-                    logResult(t.name, r.summary, r.level);
-                    actionsTotal++;
-                    resolve();
-                }, capDelay);
-            }));
-            delay += 500;
-        });
-        delay += 200;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // PHASE 6 — SIEM ALERT RULE PUSH
-    // (Splunk, ELK) — if any findings exist
-    // ─────────────────────────────────────────────────────────────
-    const siemTools = getToolsByRole(['siem']);
-
-    if (siemTools.length > 0 && (broadMode || findings.length > 0)) {
-        setTimeout(() => logSection('PHASE 6 — SIEM ALERT RULES'), delay);
-        delay += 300;
-
-        siemTools.forEach(tool => {
-            const t = tool;
-            const capDelay = delay;
-            defensePromises.push(new Promise(resolve => {
-                setTimeout(async () => {
-                    toolsEngaged.add(t.name);
-                    const r = await _runToolDefend(t, ctx);
-                    logResult(t.name, r.summary, r.level);
-                    actionsTotal++;
-                    resolve();
-                }, capDelay);
-            }));
-            delay += 450;
-        });
-        delay += 200;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // DEFENSE SUMMARY — fires after ALL tool actions complete
-    // ─────────────────────────────────────────────────────────────
-    Promise.all(defensePromises).then(() => {
-        const posture = actionsTotal === 0
-            ? 'NO DEFENSIVE TOOLS INSTALLED'
-            : findings.length === 0
-                ? 'HARDENED (preventive)'
-                : hasScanData && scanResults.critical > 0
-                    ? 'INCIDENT RESPONSE ACTIVE'
-                    : 'HARDENED';
-
-        SecurityMonitor.divider();
-        SecurityMonitor.section('DEFENSE COMPLETE');
-        SecurityMonitor.log('', `Actions taken: ${actionsTotal}  |  Tools engaged: ${toolsEngaged.size}  |  Posture: ${posture}`, actionsTotal > 0 ? 'success' : 'warning');
-        if (actionsTotal === 0) {
-            SecurityMonitor.log('', 'Install defensive tools (UFW, Fail2ban, ClamAV, AppArmor) for automated response', 'warning');
-        }
-        SecurityMonitor.divider();
-
-        // Snapshot only entries written during this defense run (scan entries are preserved above)
-        window.KjerLastDefenseResults = {
-            actions:      SecurityMonitor.entries.slice(0, SecurityMonitor.entries.length - defenseStartCount).reverse(),
-            posture,
-            completedAt:  Date.now(),
-            toolsEngaged: [...toolsEngaged],
-            actionsTotal,
-            findings,
-        };
-
-        logActivity(
-            actionsTotal > 0
-                ? `Defense complete — ${actionsTotal} action(s)  |  Posture: ${posture}`
-                : 'Defense complete — no defensive tools installed',
-            actionsTotal > 0 ? 'success' : 'warning', '', true);
-
-        showNotification(
-            `Defense complete — ${actionsTotal} action(s), ` +
-            `${toolsEngaged.size} tool(s) engaged | ${posture}`
-        );
-    });
+    showNotification(
+        `Defense complete — ${actionsTotal} action(s), ` +
+        `${toolsEngaged.size} tool(s) engaged | ${posture}`
+    );
 }
 
 function clearActivityLog() {

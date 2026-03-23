@@ -551,7 +551,7 @@ def print_banner():
 	"""Print ASCII art banner"""
 	# OS label only comes from the backend-detected OS (set during GUI initialization)
 	os_label = _get_detected_os_label()
-	version_line = f'v1.0.0 ({os_label})' if os_label else 'v1.0.0'
+	version_line = f'v1.1 ({os_label})' if os_label else 'v1.1'
 	print("\n\033[1;35m")  # Bold magenta
 	print("██╗  ██╗     ██╗███████╗██████╗ ")
 	print("██║ ██╔╝     ██║██╔════╝██╔══██╗")
@@ -1366,17 +1366,28 @@ def show_about():
 	print("  ABOUT KJER")
 	print("="*70 + "\033[0m")
 	print("\n\033[1;35mKjer\033[0m - Professional Cybersecurity Tool Management Platform")
-	print("\033[1;32mVersion:\033[0m 1.0.0")
+	print("\033[1;32mVersion:\033[0m 1.1")
 	print("\033[1;32mFramework:\033[0m Defensive Security Framework")
 	print("\033[1;32mAuthor:\033[0m PhanesGuild Software")
 	print()
-	print("A comprehensive tool installer supporting multiple Linux distributions")
-	print("with hardware-bound licensing and anti-piracy protection.")
+	print("A comprehensive cybersecurity tool management platform supporting")
+	print("multiple Linux distributions with hardware-bound licensing.")
+	print()
+	print("\033[1;33mCapabilities (v1.1):\033[0m")
+	print("  ● 7-phase Smart Scan engine: Network · Vuln · Malware · File Integrity")
+	print("                              Memory Forensics · Compliance · SIEM")
+	print("  ● 7-phase Smart Defense:     backend-powered real hardening commands")
+	print("  ● Report Wizard:             PDF · HTML · Markdown · plain text export")
+	print("  ● AIDE auto-init:            integrity database created by Defend")
+	print("  ● Chkrootkit cross-verify:   promiscuous mode + debsums + rkhunter")
+	print("  ● Vuln scanner service mgmt: GVM/OpenVAS/Nessus started by Defend")
+	print("  ● Bulk tool install:         checkboxes in GUI Tool Box")
 	print()
 	print("\033[1;33mSupported Package Managers:\033[0m apt, dnf, pacman, zypper")
 	print("\033[1;33mSupported Distributions:\033[0m Ubuntu, Debian, Fedora, Arch, openSUSE")
 	print()
-	print("\033[0;36mFor more information, visit the documentation.\033[0m")
+	print("\033[0;36mWebsite:  https://phanesguild.com/kjer\033[0m")
+	print("\033[0;36mSupport:  support@phanesguild.com\033[0m")
 
 # ==================== STANDALONE COMMAND HELPERS ====================
 
@@ -1596,7 +1607,7 @@ def print_version():
 	os_label = _get_detected_os_label()
 	platform_tag = f' ({os_label})' if os_label else ''
 	print()
-	print(f"  \033[1;35mKjer\033[0m v1.0.0{platform_tag}")
+	print(f"  \033[1;35mKjer\033[0m v1.1{platform_tag}")
 	print("  Professional Cybersecurity Tool Management Platform")
 	print("  PhanesGuild Software")
 	print()
@@ -1626,18 +1637,35 @@ def _require_ready():
 
 # ── CLI SCAN ──────────────────────────────────────────────────────────────────
 _SCAN_TOOLS = [
-	# (binary, readable_name, command_template, timeout)
-	('lynis',          'Lynis (system audit)',          ['lynis', 'audit', 'system', '--quick', '--quiet'], 120),
-	('rkhunter',       'RKHunter (rootkit scan)',        ['rkhunter', '--check', '--sk', '--rwo'],           90),
-	('chkrootkit',     'Chkrootkit',                    ['chkrootkit', '-q'],                               60),
-	('clamav',         'ClamAV Quick Scan',             ['clamscan', '-r', '--bell', '-i', '/home'],        180),
-	('clamscan',       'ClamAV Quick Scan',             ['clamscan', '-r', '--bell', '-i', '/home'],        180),
-	('aide',           'AIDE (file integrity)',         ['aide', '--check'],                                120),
-	('tiger',          'Tiger (security audit)',        ['tiger', '-q'],                                    90),
-	('ossec',          'OSSEC Check',                  ['ossec-control', 'status'],                        20),
-	('suricata',       'Suricata Status',              ['suricata', '--list-runmodes'],                    10),
-	('wazuh',          'Wazuh Agent Status',           ['wazuh-control', 'status'],                        10),
-	('openvas',        'OpenVAS Status',               ['gvm-cli', '--version'],                           10),
+	# (binary, readable_name, phase, command_template, timeout)
+	# ── Phase 1: Network Analysis ─────────────────────────────────────────────
+	('suricata',    'Suricata (IDS/IPS)',           'NETWORK ANALYSIS',   ['systemctl', 'status', 'suricata'],                           10),
+	('zeek',        'Zeek (traffic analysis)',      'NETWORK ANALYSIS',   ['zeek', '--version'],                                         10),
+	('tcpdump',     'Tcpdump',                      'NETWORK ANALYSIS',   ['tcpdump', '--version'],                                      10),
+	# ── Phase 2: Vulnerability Scan ───────────────────────────────────────────
+	('gvmd',        'GVM/OpenVAS (vuln scanner)',   'VULNERABILITY SCAN', ['systemctl', 'status', 'gvmd'],                               10),
+	('openvasmd',   'OpenVAS Manager',              'VULNERABILITY SCAN', ['systemctl', 'status', 'ospd-openvas'],                       10),
+	('nessusd',     'Nessus',                       'VULNERABILITY SCAN', ['systemctl', 'status', 'nessusd'],                            10),
+	# ── Phase 3: Malware & EDR ────────────────────────────────────────────────
+	('clamscan',    'ClamAV (/home + /tmp)',        'MALWARE & EDR',      ['clamscan', '-r', '-i', '--no-summary', '/home', '/tmp'],     180),
+	('rkhunter',    'RKHunter (rootkit)',           'MALWARE & EDR',      ['rkhunter', '--check', '--skip-keypress', '--quiet'],          90),
+	('chkrootkit',  'Chkrootkit',                  'MALWARE & EDR',      ['chkrootkit', '-q'],                                           60),
+	# ── Phase 4: File Integrity ───────────────────────────────────────────────
+	('aide',        'AIDE (file integrity)',        'FILE INTEGRITY',     ['aide', '--check'],                                           120),
+	('tripwire',    'Tripwire',                     'FILE INTEGRITY',     ['tripwire', '--check'],                                        60),
+	# ── Phase 5: Memory Forensics ─────────────────────────────────────────────
+	('volatility',  'Volatility (memory)',          'MEMORY FORENSICS',   ['volatility', '--info'],                                       15),
+	# ── Phase 6: Compliance & Audit ───────────────────────────────────────────
+	('lynis',       'Lynis (system audit)',         'COMPLIANCE & AUDIT', ['lynis', 'audit', 'system', '--quick', '--quiet'],            120),
+	('tiger',       'Tiger (security audit)',       'COMPLIANCE & AUDIT', ['tiger', '-q'],                                               90),
+	('auditctl',    'Linux Audit (rules)',          'COMPLIANCE & AUDIT', ['auditctl', '-l'],                                            10),
+	('osqueryi',    'OsQuery',                      'COMPLIANCE & AUDIT', ['osqueryi', '--version'],                                     10),
+	# ── Phase 7: SIEM & Log Ingest ────────────────────────────────────────────
+	('splunk',      'Splunk (SIEM)',                'SIEM & LOG INGEST',  ['splunk', 'status'],                                          10),
+	('logstash',    'Logstash (ELK)',               'SIEM & LOG INGEST',  ['logstash', '--version'],                                     10),
+	# ── Legacy / other ────────────────────────────────────────────────────────
+	('ossec-control','OSSEC',                       'MALWARE & EDR',      ['ossec-control', 'status'],                                   20),
+	('wazuh-control','Wazuh Agent',                 'MALWARE & EDR',      ['wazuh-control', 'status'],                                   10),
 ]
 
 def _which(binary):
@@ -1646,66 +1674,71 @@ def _which(binary):
 	return result.returncode == 0
 
 def cli_scan():
-	"""Run a security scan using available installed tools."""
+	"""Run a 7-phase security scan using available installed tools."""
 	print()
 	print("\033[1;36m" + "="*70)
-	print("  KJER SECURITY SCAN")
+	print("  KJER SECURITY SCAN  —  7-phase engine")
 	print("="*70 + "\033[0m")
-	print("  Checking for available scan tools...")
 	print()
 
-	available = [(b, n, cmd, t) for (b, n, cmd, t) in _SCAN_TOOLS if _which(b)]
+	# Group available tools by phase
+	phases_found = {}
+	for binary, name, phase, cmd, timeout in _SCAN_TOOLS:
+		if _which(binary):
+			phases_found.setdefault(phase, []).append((binary, name, cmd, timeout))
 
-	if not available:
+	if not phases_found:
 		print("\033[1;31m  No scan tools found in PATH.\033[0m")
-		print("  Install tools via the Kjer GUI or:")
-		print("    kjer        → Option 2 (Install Tools)")
-		print("  Supported: lynis, rkhunter, chkrootkit, clamav, aide, tiger")
+		print("  Install tools via: kjer  → Option 2 (Install Tools)")
+		print("  Recommended: lynis, rkhunter, chkrootkit, clamav, aide, suricata")
 		return
 
-	print(f"  Found {len(available)} tool(s): {', '.join(n for _,n,_,_ in available)}")
+	total_tools = sum(len(v) for v in phases_found.values())
+	print(f"  Found {total_tools} tool(s) across {len(phases_found)} active phase(s)")
 	print()
 
 	findings = 0
-	for binary, name, cmd, timeout in available:
-		print(f"\033[1;33m── {name} \033[0m" + "─"*max(0, 60 - len(name)))
-		try:
-			# Run with timeout, stream output line by line
-			proc = subprocess.Popen(
-				cmd,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.STDOUT,
-				text=True
-			)
+	for phase, tools in phases_found.items():
+		print(f"\033[1;35m── {phase} \033[0m" + "─"*max(0, 58 - len(phase)))
+		for binary, name, cmd, timeout in tools:
+			print(f"\n  \033[1;33m▶ {name}\033[0m")
 			try:
-				stdout, _ = proc.communicate(timeout=timeout)
-			except subprocess.TimeoutExpired:
-				proc.kill()
-				stdout, _ = proc.communicate()
-				print(f"  \033[1;33m⚠  Timed out after {timeout}s — partial results:\033[0m")
+				proc = subprocess.Popen(
+					cmd,
+					stdout=subprocess.PIPE,
+					stderr=subprocess.STDOUT,
+					text=True
+				)
+				try:
+					stdout, _ = proc.communicate(timeout=timeout)
+				except subprocess.TimeoutExpired:
+					proc.kill()
+					stdout, _ = proc.communicate()
+					print(f"    \033[1;33m⚠  Timed out after {timeout}s\033[0m")
 
-			lines = (stdout or '').splitlines()
-			for line in lines:
-				l = line.strip()
-				if not l:
-					continue
-				lo = l.lower()
-				if any(kw in lo for kw in ('warning', 'found', 'infected', 'vulnerable', 'fail', '[x]', '[!]')):
-					print(f"  \033[1;31m[WARN]\033[0m {l}")
-					findings += 1
-				elif any(kw in lo for kw in ('ok', 'not found', 'clean', 'passed', '[ok]')):
-					print(f"  \033[1;32m[OK]\033[0m   {l}")
-				else:
-					print(f"  \033[0;37m       {l}\033[0m")
+				lines = (stdout or '').splitlines()
+				printed = 0
+				for line in lines:
+					l = line.strip()
+					if not l:
+						continue
+					lo = l.lower()
+					if any(kw in lo for kw in ('warning','found','infected','vulnerable','fail','[x]','[!]','error','critical')):
+						print(f"    \033[1;31m[!]\033[0m {l}")
+						findings += 1
+					elif any(kw in lo for kw in ('ok','not found','clean','passed','[ok]','no rootkit','0 infected')):
+						print(f"    \033[1;32m[✓]\033[0m {l}")
+					elif printed < 10:
+						print(f"    \033[0;37m    {l}\033[0m")
+					printed += 1
 
-			if proc.returncode not in (0, None, 1):
-				print(f"  \033[0;33m  (exited with code {proc.returncode})\033[0m")
+				if proc.returncode not in (0, None, 1):
+					print(f"    \033[0;33m(exit {proc.returncode})\033[0m")
 
-		except PermissionError:
-			print(f"  \033[1;31m✗ Permission denied running {binary}. Try with sudo.\033[0m")
-		except Exception as e:
-			print(f"  \033[1;31m✗ Error running {binary}: {e}\033[0m")
-
+			except PermissionError:
+				print(f"    \033[1;31m✗ Permission denied. Try: sudo kjer --scan\033[0m")
+			except Exception as e:
+				print(f"    \033[1;31m✗ {e}\033[0m")
 		print()
 
 	print("\033[1;36m" + "="*70 + "\033[0m")
@@ -1713,75 +1746,74 @@ def cli_scan():
 		print("  \033[1;32m✓ Scan complete — no flagged findings.\033[0m")
 	else:
 		print(f"  \033[1;31m⚠  Scan complete — {findings} finding(s) flagged. Review output above.\033[0m")
-	print("  \033[0;33mNote: For detailed reports and visualizations, use the Kjer GUI.\033[0m")
+		print("  \033[0;33m  → Run 'kjer --gui' then click DEFEND to apply automated fixes.\033[0m")
+	print("  \033[0;33m  For detailed reports and visualizations, use the GUI (Reports tab).\033[0m")
 	print("\033[1;36m" + "="*70 + "\033[0m")
 	print()
 
 
 # ── CLI DEFEND ────────────────────────────────────────────────────────────────
-_DEFEND_TOOLS = [
-	# (binary, name,          action description,                    command_template,                             timeout)
-	('ufw',           'UFW (Firewall)',       'Enable firewall',                     ['ufw', '--force', 'enable'],                       15),
-	('fail2ban-client','Fail2Ban',            'Check & start fail2ban',              ['fail2ban-client', 'status'],                      15),
-	('apparmor_parser','AppArmor',            'Reload AppArmor profiles',            ['apparmor_parser', '-r', '/etc/apparmor.d'],        30),
-	('aa-status',      'AppArmor Status',     'Check AppArmor enforcement status',   ['aa-status'],                                      10),
-	('auditctl',       'Linux Audit',         'Enable audit rules',                  ['auditctl', '-e', '1'],                            10),
-	('chattr',         'Immutable Files',     'Harden /etc/passwd',                  ['chattr', '+i', '/etc/passwd'],                    10),
-	('sysctl',         'Kernel Hardening',    'Apply sysctl hardening params',       ['sysctl', '-w', 'net.ipv4.tcp_syncookies=1'],      10),
-	('ossec-control',  'OSSEC',               'Restart OSSEC HIDS',                  ['ossec-control', 'restart'],                       30),
-	('wazuh-control',  'Wazuh',               'Restart Wazuh agent',                 ['wazuh-control', 'restart'],                       30),
-	('clamd',          'ClamAV Daemon',       'Start ClamAV daemon',                 ['clamd'],                                          20),
+# Tool keys recognized by the backend defend-tool action.
+# Tuple: (backend_key, display_name, detect_binary)
+_DEFEND_TOOL_KEYS = [
+	('ufw',        'Firewall (UFW)',                    'ufw'),
+	('fail2ban',   'Fail2Ban (brute-force protection)', 'fail2ban-client'),
+	('clamav',     'ClamAV (AV scan + freshclam)',      'clamscan'),
+	('rkhunter',   'RKHunter (rootkit baseline)',       'rkhunter'),
+	('chkrootkit', 'Chkrootkit (cross-verification)',   'chkrootkit'),
+	('apparmor',   'AppArmor (MAC enforcement)',        'aa-status'),
+	('selinux',    'SELinux (MAC enforcement)',         'setenforce'),
+	('auditd',     'Linux Audit (auditd)',              'auditctl'),
+	('suricata',   'Suricata (IDS/IPS)',                'suricata'),
+	('aide',       'AIDE (file integrity)',             'aide'),
+	('tripwire',   'Tripwire (file integrity)',         'tripwire'),
+	('lynis',      'Lynis (compliance audit)',          'lynis'),
+	('tiger',      'Tiger (security audit)',            'tiger'),
+	('gvm',        'GVM/OpenVAS (vuln scanner svc)',    'gvmd'),
+	('nessus',     'Nessus (vuln scanner svc)',         'nessusd'),
 ]
 
 def cli_defend():
-	"""Activate defensive security measures using available installed tools."""
+	"""Activate Smart Defense using backend-powered hardening for each installed tool."""
 	print()
 	print("\033[1;36m" + "="*70)
-	print("  KJER SMART DEFENSE")
+	print("  KJER SMART DEFENSE  —  backend-powered hardening")
 	print("="*70 + "\033[0m")
-	print("  Checking for available defensive tools...")
 	print()
 
-	available = [(b, n, a, cmd, t) for (b, n, a, cmd, t) in _DEFEND_TOOLS if _which(b)]
+	available = [
+		(key, name) for key, name, detect in _DEFEND_TOOL_KEYS if _which(detect)
+	]
 
 	if not available:
 		print("\033[1;31m  No defense tools found in PATH.\033[0m")
-		print("  Install tools via the Kjer GUI or:")
-		print("    kjer        → Option 2 (Install Tools)")
-		print("  Supported: ufw, fail2ban, apparmor, auditctl, sysctl, ossec, wazuh")
+		print("  Install tools via: kjer  → Option 2 (Install Tools)")
+		print("  Recommended: ufw, fail2ban, clamav, apparmor, auditd, suricata")
 		return
 
-	print(f"  Activating {len(available)} defensive tool(s)...")
+	print(f"  Activating hardening for {len(available)} tool(s)...")
 	print()
 
 	success = 0
-	for binary, name, action, cmd, timeout in available:
-		print(f"  \033[1;33m▶\033[0m {name}: {action}")
-		try:
-			result = subprocess.run(
-				cmd,
-				capture_output=True,
-				text=True,
-				timeout=timeout
-			)
-			if result.returncode == 0:
-				print(f"    \033[1;32m✓ Done\033[0m")
-				success += 1
+	for key, name in available:
+		print(f"  \033[1;33m▶\033[0m {name}")
+		# Call backend defend-tool — uses smart hardening logic from cmd_defend_tool()
+		result = BackendAPI.call_backend('defend-tool', tool=key)
+		if result.get('success'):
+			summary = (result.get('summary') or result.get('message') or 'Hardening applied')[:120]
+			print(f"    \033[1;32m✓\033[0m {summary}")
+			success += 1
+		else:
+			err = str(result.get('error') or result.get('message') or 'failed')[:120]
+			if 'No hardening procedure' in err:
+				print(f"    \033[0;33m  (no hardening procedure defined — skipped)\033[0m")
 			else:
-				err = (result.stderr or result.stdout or '').strip().splitlines()
-				err_line = err[-1] if err else f'exit {result.returncode}'
-				print(f"    \033[1;33m⚠  {err_line}\033[0m")
-		except subprocess.TimeoutExpired:
-			print(f"    \033[1;33m⚠  Timed out after {timeout}s\033[0m")
-		except PermissionError:
-			print(f"    \033[1;31m✗ Permission denied. Try: sudo kjer --defend\033[0m")
-		except Exception as e:
-			print(f"    \033[1;31m✗ {e}\033[0m")
+				print(f"    \033[1;33m⚠\033[0m  {err}")
 
 	print()
 	print("\033[1;36m" + "="*70 + "\033[0m")
-	print(f"  \033[1;32m✓ Defense activation complete — {success}/{len(available)} action(s) succeeded.\033[0m")
-	print("  \033[0;33mNote: For full Smart Defense automation and reports, use the Kjer GUI.\033[0m")
+	print(f"  \033[1;32m✓ Defense complete — {success}/{len(available)} tool(s) hardened.\033[0m")
+	print("  \033[0;33m  For full Smart Defense + reports, use: kjer --gui → DEFEND\033[0m")
 	print("\033[1;36m" + "="*70 + "\033[0m")
 	print()
 

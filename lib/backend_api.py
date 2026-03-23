@@ -1520,7 +1520,9 @@ def cmd_defend_tool(args):
                     break
             ok = 1 if (init_r.returncode == 0 and copied) else 0
             return {
-                'success': True, 'tool': tool_name, 'steps_run': 2, 'steps_ok': ok,
+                'success': True, 'tool': tool_name,
+                'level': 'success' if ok > 0 else 'warning',
+                'steps_run': 2, 'steps_ok': ok,
                 'summary': (
                     'AIDE database initialised — integrity baseline established. Future scans will detect unauthorized file changes.'
                     if ok > 0 else
@@ -1528,7 +1530,66 @@ def cmd_defend_tool(args):
                 ),
                 'results': [{'cmd': 'aide --init', 'rc': init_r.returncode}],
             }
-        # DB exists — proceed to normal check in HARDEN_STEPS below
+        # DB exists — run --check and parse actual output for accurate summary
+        r = run_privileged(['aide', '--check'], timeout=120)
+        out = r.stdout or r.stderr or ''
+        out_l = out.lower()
+        n_chg = int(m.group(1)) if (m := re.search(r'changed:\s*(\d+)', out_l)) else 0
+        n_add = int(m.group(1)) if (m := re.search(r'added:\s*(\d+)',   out_l)) else 0
+        n_rem = int(m.group(1)) if (m := re.search(r'removed:\s*(\d+)', out_l)) else 0
+        any_changes = n_chg + n_add + n_rem
+        if any_changes > 0:
+            return {
+                'success': True, 'tool': tool_name, 'level': 'warning',
+                'steps_run': 1, 'steps_ok': 1,
+                'summary': (
+                    f'AIDE check: {n_chg} changed, {n_add} added, {n_rem} removed — '
+                    'review /var/log/aide.log and update baseline with: aide --update'
+                ),
+                'results': [{'cmd': 'aide --check', 'rc': r.returncode}],
+            }
+        return {
+            'success': True, 'tool': tool_name, 'level': 'success',
+            'steps_run': 1, 'steps_ok': 1,
+            'summary': 'AIDE file-integrity check — no unauthorised changes detected',
+            'results': [{'cmd': 'aide --check', 'rc': r.returncode}],
+        }
+
+    # ── TRIPWIRE — check and return specific message if not configured ───────────────────
+    if tool_name == 'tripwire':
+        if not shutil.which('tripwire'):
+            return {
+                'success': False,
+                'error': 'tripwire binary not found on PATH',
+            }
+        r = run_privileged(['tripwire', '--check'], timeout=60)
+        out_l = (r.stdout or r.stderr or '').lower()
+        if r.returncode != 0:
+            not_configured = any(kw in out_l for kw in (
+                'not configured', 'not initialized', 'no site key',
+                'policy file', 'database does not exist', 'no database'
+            ))
+            if not_configured:
+                return {
+                    'success': True, 'tool': tool_name, 'level': 'warning',
+                    'steps_run': 1, 'steps_ok': 0,
+                    'summary': 'Tripwire not yet fully configured — run: sudo tripwire --init to create the policy baseline',
+                    'results': [{'cmd': 'tripwire --check', 'rc': r.returncode}],
+                }
+            violations = re.search(r'modified:\s*(\d+)', out_l)
+            n = int(violations.group(1)) if violations else '?'
+            return {
+                'success': True, 'tool': tool_name, 'level': 'warning',
+                'steps_run': 1, 'steps_ok': 0,
+                'summary': f'Tripwire check: {n} policy violation(s) — review /var/lib/tripwire/ and run: tripwire --update',
+                'results': [{'cmd': 'tripwire --check', 'rc': r.returncode}],
+            }
+        return {
+            'success': True, 'tool': tool_name, 'level': 'success',
+            'steps_run': 1, 'steps_ok': 1,
+            'summary': 'Tripwire check completed — no policy violations detected',
+            'results': [{'cmd': 'tripwire --check', 'rc': 0}],
+        }
 
     # ── CHKROOTKIT — promiscuous mode check + package integrity + rkhunter cross-verify ──
     if tool_name == 'chkrootkit':
@@ -1578,16 +1639,19 @@ def cmd_defend_tool(args):
                 f'{len(infected_lines)} flagged pattern(s) — LIKELY FALSE POSITIVES '
                 'from IDS promiscuous mode (Suricata/Wireshark/tcpdump)'
             )
+            verdict_level = 'info'
         elif infected_lines:
             verdict = (
                 f'{len(infected_lines)} pattern(s) persist after cross-check; '
                 'if package integrity passed these may also be false positives — '
                 'boot from live USB for definitive verification'
             )
+            verdict_level = 'warning'
         else:
             verdict = 'Second-pass clean — rootkit signatures not confirmed'
+            verdict_level = 'success'
         return {
-            'success': True, 'tool': tool_name,
+            'success': True, 'tool': tool_name, 'level': verdict_level,
             'steps_run': 4, 'steps_ok': 4,
             'summary': f'{verdict} | {detail}',
             'results': [{'cmd': 'chkrootkit -q', 'rc': ck_r.returncode}],
@@ -1721,11 +1785,14 @@ def cmd_defend_tool(args):
             'error':   f'No {tool_name} binaries found — is the tool installed and on PATH?',
         }
 
+    n_exec = len(executable)
+    level = 'success' if steps_ok == n_exec else ('warning' if steps_ok > 0 else 'error')
     return {
         'success':   True,
         'tool':      tool_name,
+        'level':     level,
         'summary':   step['summary'],
-        'steps_run': len(executable),
+        'steps_run': n_exec,
         'steps_ok':  steps_ok,
         'results':   cmd_results,
     }
