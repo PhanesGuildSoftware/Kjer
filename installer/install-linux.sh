@@ -200,6 +200,54 @@ show_next_steps() {
     echo ""
 }
 
+setup_sudo_rules() {
+    print_header "Configuring Passwordless Package Management"
+
+    # Determine the actual (non-root) user who invoked sudo
+    ACTUAL_USER="${SUDO_USER:-}"
+    if [[ -z "$ACTUAL_USER" ]]; then
+        ACTUAL_USER="$(logname 2>/dev/null || echo '')"
+    fi
+    if [[ -z "$ACTUAL_USER" || "$ACTUAL_USER" == "root" ]]; then
+        print_warning "Could not determine non-root user — skipping sudo rules"
+        return
+    fi
+
+    # Collect paths to all installed package managers
+    PKG_CMDS=""
+    for pm_path in /usr/bin/apt-get /usr/bin/apt /usr/bin/dpkg /usr/bin/dnf \
+                   /usr/bin/pacman /usr/bin/zypper; do
+        if [[ -x "$pm_path" ]]; then
+            [[ -n "$PKG_CMDS" ]] && PKG_CMDS="${PKG_CMDS}, "
+            PKG_CMDS="${PKG_CMDS}${pm_path}"
+        fi
+    done
+
+    if [[ -z "$PKG_CMDS" ]]; then
+        print_warning "No supported package managers found — skipping sudo rules"
+        return
+    fi
+
+    SUDOERS_FILE="/etc/sudoers.d/kjer"
+    cat > "$SUDOERS_FILE" << EOF
+# Kjer Security Framework - passwordless package management
+# Allows Kjer to install/remove security tools without sudo prompts.
+# Created automatically by install-linux.sh — safe to delete if Kjer is removed.
+${ACTUAL_USER} ALL=(root) NOPASSWD: ${PKG_CMDS}
+EOF
+    chmod 440 "$SUDOERS_FILE"
+    chown root:root "$SUDOERS_FILE"
+
+    # Validate with visudo -c
+    if visudo -c -f "$SUDOERS_FILE" &>/dev/null; then
+        print_success "Passwordless package management configured for: $ACTUAL_USER"
+    else
+        rm -f "$SUDOERS_FILE"
+        print_warning "Sudoers validation failed — passwordless install not configured"
+        print_info "You can set it up manually:  echo \"$ACTUAL_USER ALL=(root) NOPASSWD: ${PKG_CMDS}\" | sudo tee /etc/sudoers.d/kjer && sudo chmod 440 /etc/sudoers.d/kjer"
+    fi
+}
+
 main() {
     print_header "Kjer Linux Security Framework - Setup"
     # Require root
@@ -224,6 +272,7 @@ main() {
     setup_nodejs
     install_optional_tools
     setup_cli
+    setup_sudo_rules
     # Set permissions for all Kjer files/folders
     KJER_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
     chown -R root:root "$KJER_ROOT"

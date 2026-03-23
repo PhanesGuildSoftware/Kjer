@@ -1,8 +1,8 @@
 {
-  "version": "1.0.0",
-  "channel": "free",
+  "version": "v1.1",
+  "channel": "licensed",
   "repo_owner": "PhanesGuildSoftware",
   "repo_name": "Kjer-upgrades",
-  "released_at": "2026-02-27",
-  "description": "Kjer Security Framework — free baseline release"
+  "released_at": "2026-03-23",
+  "description": "Kjer Security Framework — commercial release"
 }

@@ -63,7 +63,16 @@ else
     echo -e "  ${YELLOW}·${NC} ~/.kjer/ not found (already clean)"
 fi
 
-# ── 4. Optionally remove desktop/node_modules ───────────────────────────────
+# ── 4. Kill any running Electron / Kjer instance ───────────────────────────
+if pgrep -f "electron" > /dev/null 2>&1 || pgrep -f "kjer" > /dev/null 2>&1; then
+    pkill -f "electron" 2>/dev/null || true
+    pkill -f "kjer" 2>/dev/null || true
+    echo -e "  ${GREEN}✓${NC} Stopped running Kjer/Electron process(es)"
+else
+    echo -e "  ${YELLOW}·${NC} No running Kjer/Electron process found"
+fi
+
+# ── 5. Optionally remove desktop/node_modules ───────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 KJER_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 NODE_MODULES="$KJER_ROOT/desktop/node_modules"
@@ -86,6 +95,7 @@ echo -e "${GREEN}  Reset complete. Ready for a fresh install.${NC}"
 echo -e "${GREEN}══════════════════════════════════════════════════════════════════${NC}"
 echo ""
 echo "  Next steps:"
-echo -e "    ${CYAN}bash installer/kjer-install.sh${NC}   # install dependencies"
-echo -e "    ${CYAN}kjer --gui${NC}                        # activate & initialize"
+echo -e "    ${CYAN}bash installer/kjer-install.sh${NC}         # install dependencies"
+echo -e "    ${CYAN}kjer --gui${NC}                              # activate & initialize"
+echo -e "    ${CYAN}cd desktop && npm start${NC}                 # or restart the GUI directly"
 echo ""

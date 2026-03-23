@@ -15,7 +15,9 @@
     --color-bg-white: #333333;
     --color-text-dark: #FFFFFF;
     --color-text-light: #EEEEEE;
+    --color-empty-state: #9D4EDD;
     --color-border: #444444;
+    --text-primary: #1a1a1a;
     --color-card-shadow: rgba(157, 78, 221, 0.12);
     
     --font-header: "Tomorrow", sans-serif;
@@ -50,7 +52,9 @@ body.dark-mode {
     --color-bg-white: #1a1a1a;
     --color-text-dark: #B0E0E6;
     --color-text-light: #B0E0E6;
+    --color-empty-state: #B0E0E6;
     --color-border: #2a2a2a;
+    --text-primary: #e8e8e8;
     --color-card-shadow: rgba(157, 78, 221, 0.18);
     background: #333333;
     color: #FFFFFF;
@@ -124,6 +128,10 @@ body.dark-mode {
 
 .icon-profiles {
     background-image: url('regular-free-icon-svgs/folder-1.svg');
+}
+
+.icon-network {
+    background-image: url('regular-free-icon-svgs/vector-nodes-6.svg');
 }
 
 .icon-status {
@@ -738,7 +746,7 @@ body {
     background-color: rgba(176, 224, 230, 0.06);
     border-bottom: 2px solid var(--color-border);
     font-weight: bold;
-    color: var(--color-text-dark);
+    color: #1a1a1a;
     font-size: 13px;
     position: sticky;
     top: 0;
@@ -786,7 +794,7 @@ body {
 
 .log-col-time {
     font-family: 'Courier New', monospace;
-    color: var(--color-text-dark);
+    color: #1a1a1a;
     font-size: 12px;
     font-weight: 500;
 }
@@ -800,9 +808,14 @@ body {
 }
 
 .log-col-message {
-    color: var(--color-text-dark);
+    color: #1a1a1a;
     font-size: 13px;
     word-break: break-word;
+}
+
+.log-tool-name {
+    color: #9D4EDD;
+    font-weight: 600;
 }
 
 .log-level {
@@ -817,28 +830,28 @@ body {
 }
 
 .log-level.info {
-    background-color: rgba(176, 224, 230, 0.2);
-    color: #B0E0E6;
+    background-color: rgba(0, 100, 180, 0.15);
+    color: #004a80;
 }
 
 .log-level.success {
-    background-color: rgba(0, 200, 0, 0.2);
-    color: #B0E0E6;
+    background-color: rgba(0, 150, 0, 0.15);
+    color: #1a6b1a;
 }
 
 .log-level.warning {
-    background-color: rgba(176, 224, 230, 0.2);
-    color: #B0E0E6;
+    background-color: rgba(200, 140, 0, 0.2);
+    color: #7a5200;
 }
 
 .log-level.error {
-    background-color: rgba(255, 68, 68, 0.2);
-    color: #B0E0E6;
+    background-color: rgba(200, 0, 0, 0.15);
+    color: #99001a;
 }
 
 .log-level.critical {
-    background-color: rgba(255, 0, 0, 0.3);
-    color: #B0E0E6;
+    background-color: rgba(180, 0, 0, 0.25);
+    color: #6b0000;
     animation: pulse 1s infinite;
 }
 
@@ -849,6 +862,34 @@ body {
     50% {
         opacity: 0.7;
     }
+}
+
+@keyframes scan-sweep {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+}
+
+#scanProgressBar {
+    display: none;
+    height: 4px;
+    background: rgba(176, 224, 230, 0.15);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 10px;
+    width: 100%;
+}
+
+#scanProgressBar.scanning {
+    display: block;
+}
+
+#scanProgressBar::after {
+    content: '';
+    display: block;
+    width: 25%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, #B0E0E6, transparent);
+    animation: scan-sweep 1.4s ease-in-out infinite;
 }
 
 .action-buttons {
@@ -912,6 +953,13 @@ body {
     font-size: 12px;
     color: #555;
     min-width: 70px;
+}
+
+.selected-storage-size {
+    font-size: 12px;
+    color: #9D4EDD;
+    font-weight: 600;
+    min-width: 120px;
 }
 
 /* Per-card checkbox */
@@ -1390,6 +1438,11 @@ body {
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     color: #FFFFFF;
+}
+
+.form-input::placeholder {
+    color: #B0E0E6;
+    opacity: 0.6;
 }
 
 .form-input:focus {
@@ -1929,6 +1982,24 @@ body.dark-mode .log-header {
     border-bottom: 2px solid #B0E0E6;
     color: #B0E0E6;
 }
+
+body.dark-mode .log-col-time {
+    color: #B0E0E6;
+}
+
+body.dark-mode .log-col-message {
+    color: #B0E0E6;
+}
+
+body.dark-mode .log-tool-name {
+    color: #B0E0E6;
+}
+
+body.dark-mode .log-level.info    { background-color: rgba(176, 224, 230, 0.2); color: #B0E0E6; }
+body.dark-mode .log-level.success { background-color: rgba(0, 200, 0, 0.2);     color: #B0E0E6; }
+body.dark-mode .log-level.warning { background-color: rgba(176, 224, 230, 0.2); color: #B0E0E6; }
+body.dark-mode .log-level.error   { background-color: rgba(255, 68, 68, 0.2);   color: #B0E0E6; }
+body.dark-mode .log-level.critical{ background-color: rgba(255, 0, 0, 0.3);     color: #B0E0E6; }
 
 body.dark-mode .btn-small {
     border-color: #B0E0E6;

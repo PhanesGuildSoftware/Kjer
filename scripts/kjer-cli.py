@@ -127,6 +127,21 @@ class SystemAnalyzer:
 					path = _shutil.which(tname)
 				if path:
 					entry = {'binary': binary, 'path': path, 'category': cat, 'installed': True}
+					# Some binaries persist as system deps after the security tool is
+					# uninstalled (e.g. sestatus from policycoreutils after selinux is
+					# removed).  If active_check_pattern is set, run the binary and
+					# confirm its output matches before counting the tool as installed.
+					active_pattern = tdata.get('active_check_pattern', '')
+					if active_pattern:
+						try:
+							chk = subprocess.run(
+								[binary], capture_output=True, text=True, timeout=5
+							)
+							output = chk.stdout + chk.stderr
+							if not re.search(active_pattern, output, re.IGNORECASE):
+								continue  # binary present but tool not active
+						except Exception:
+							continue
 					# Try to get version string cheaply
 					for ver_flag in ('--version', '-V', '-v', 'version'):
 						try:
@@ -233,6 +248,30 @@ class SystemAnalyzer:
 			tool_list = ', '.join(list(detected.keys())[:5])
 			suffix = f' (+{pre-5} more)' if pre > 5 else ''
 			warnings.append(('info', f'{pre} security tool(s) already installed on this system: {tool_list}{suffix}'))
+
+		# MAC conflict: AppArmor and SELinux cannot coexist safely
+		if 'apparmor' in detected and 'selinux' in detected:
+			warnings.append(('critical',
+				'AppArmor and SELinux are both active. These MAC frameworks conflict — '
+				'only one should be enforcing at a time. Disable one immediately.'))
+
+		# Redundant rootkit scanner pair
+		if 'rkhunter' in detected and 'chkrootkit' in detected:
+			warnings.append(('warning',
+				'Both rkhunter and chkrootkit are installed. They cover the same threat '
+				'class; chkrootkit is redundant — consider removing it.'))
+
+		# Redundant file-integrity monitor pair
+		if 'aide' in detected and 'tripwire' in detected:
+			warnings.append(('warning',
+				'Both AIDE and Tripwire are installed. They duplicate file-integrity '
+				'monitoring; Tripwire is redundant — consider removing it.'))
+
+		# OpenVAS/GVM collision (same underlying package)
+		if 'openvas' in detected and 'gvm' in detected:
+			warnings.append(('warning',
+				'OpenVAS and GVM are the same Greenbone package installed twice under '
+				'different names. Remove the openvas entry to avoid confusion.'))
 
 		return warnings
 
@@ -935,17 +974,19 @@ def show_status():
 	lic = BackendAPI.get_license_info()
 	print(f"\n\033[1;32mLicense:\033[0m")
 	if lic.get('activated'):
+		ltype = (lic.get('license_type') or lic.get('type') or 'personal').lower()
+		tier_label = 'Enterprise' if ltype == 'enterprise' else 'Personal'
 		print(f"  Status:         \033[1;32mActive\033[0m")
-		print(f"  Version tier:   v{lic.get('version_lock', '?')}.x")
+		print(f"  License tier:   {tier_label}")
 		print(f"  Expires:        {lic.get('expires_at', 'Unknown')}  ({lic.get('days_remaining', '?')} days remaining)")
 		if lic.get('warning'):
 			print(f"  \033[1;33m⚠ {lic['warning']}\033[0m")
 	else:
-		print(f"  Status:         \033[1;32m[Free]\033[0m")
+		print(f"  Status:         \033[0;33m[Not Activated]\033[0m")
 		if lic.get('expired'):
 			print(f"  \033[1;31m⚠ {lic.get('error', 'License expired')}\033[0m")
-		elif lic.get('version_mismatch'):
-			print(f"  \033[1;33m⚠ {lic.get('error', 'Version mismatch')}\033[0m")
+		elif lic.get('error'):
+			print(f"  \033[1;33m⚠ {lic.get('error')}\033[0m")
 
 	# ── System status from backend ────────────────────────────────────────
 	status_result = BackendAPI.get_system_status()
@@ -1088,12 +1129,13 @@ def _save_license_key_cache(key, activation_result):
 
 
 def upgrade_kjer():
-	"""CLI license key entry for upgrading Kjer to a new version"""
+	"""CLI license key entry for changing or renewing a Kjer license tier"""
 	print("\n\033[1;36m" + "="*70)
-	print("  UPGRADE KJER")
+	print("  CHANGE / RENEW KJER LICENSE")
 	print("="*70 + "\033[0m")
 	print()
-	print("  Enter your new license key to upgrade Kjer.")
+	print("  Enter your license key to activate, change tier, or renew.")
+	print("  Available tiers: Personal | Enterprise")
 	print("  Keys are in the format: KJER-XX-XXXX-XXXX-XXXX")
 	print()
 
@@ -1113,7 +1155,7 @@ def upgrade_kjer():
 	try:
 		raw = input(prompt).strip().upper()
 	except (KeyboardInterrupt, EOFError):
-		print("\n\033[0;33m  Upgrade cancelled.\033[0m")
+		print("\n\033[0;33m  Cancelled.\033[0m")
 		return
 
 	# Reuse saved key if user pressed Enter
@@ -1122,7 +1164,7 @@ def upgrade_kjer():
 			raw = saved_key
 			print(f"\033[0;36m  → Using saved key: {raw[:10]}...\033[0m")
 		else:
-			print("\033[0;33m  Upgrade cancelled.\033[0m")
+			print("\033[0;33m  Cancelled.\033[0m")
 			return
 
 	# Basic format validation before hitting license_manager
@@ -1135,13 +1177,6 @@ def upgrade_kjer():
 	print()
 	print("\033[1;36m→ Validating license key...\033[0m")
 
-	# Get current version lock before activating
-	try:
-		current_info = BackendAPI.get_license_info()
-		current_version = current_info.get('version_lock') or '1.0'
-	except Exception:
-		current_version = '1.0'
-
 	result = BackendAPI.activate_license(raw)
 
 	if not result.get('success'):
@@ -1153,79 +1188,13 @@ def upgrade_kjer():
 	# Cache the key so the user never has to retype it
 	_save_license_key_cache(raw, result)
 
-	new_version = result.get('version_lock') or result.get('license_version') or None
-
-	if new_version and new_version != current_version:
-		# Version upgrade detected
-		print(f"\n\033[1;32m✓ v{new_version} license activated!\033[0m")
-		print()
-		print("\033[1;33m" + "─"*70 + "\033[0m")
-		print(f"  A reinitialization is required to upgrade your Kjer system")
-		print(f"  from \033[1;33mv{current_version}\033[0m to \033[1;32mv{new_version}\033[0m.")
-		print("\033[1;33m" + "─"*70 + "\033[0m")
-		print()
-		print("  This will update all system components, tool definitions,")
-		print("  and unlock features included with your new license tier.")
-		print("  Your installed tools and settings will be preserved.")
-		print()
-
-		confirm = input("\033[1;33mDownload and apply upgrade now? (y/yes/no):\033[0m ").strip().lower()
-		if confirm not in ('y', 'yes'):
-			print()
-			print(f"\033[0;33m  Skipped. Your v{new_version} license is active.\033[0m")
-			print("  Run 'kjer --upgrade' or use menu option 9 at any time to apply the upgrade.")
-			return
-
-		# ── Download upgrade from private GitHub repo ─────────────────
-		github_token = result.get('github_token') or ''
-		if not github_token:
-			print("\n\033[1;31m✗ No upgrade token returned by the license server.\033[0m")
-			print("  Contact support if this persists.")
-			return
-
-		print()
-		print(f"\033[1;36m→ Downloading Kjer v{new_version} from upgrade repository…\033[0m")
-
-		try:
-			up_result = subprocess.run(
-				[sys.executable, str(UPGRADE_MANAGER), new_version, github_token, str(INSTALL_ROOT)],
-				capture_output=True, text=True, timeout=180
-			)
-			parsed = json.loads((up_result.stdout or '').strip())
-		except json.JSONDecodeError:
-			print("\n\033[1;31m✗ Could not parse upgrade response.\033[0m")
-			print(f"  Raw output: {up_result.stdout or up_result.stderr or 'empty'}")
-			return
-		except subprocess.TimeoutExpired:
-			print("\n\033[1;31m✗ Upgrade download timed out. Check your connection.\033[0m")
-			return
-		except Exception as e:
-			print(f"\n\033[1;31m✗ Upgrade error: {e}\033[0m")
-			return
-
-		if not parsed.get('success'):
-			print(f"\n\033[1;31m✗ Upgrade failed: {parsed.get('message', 'Unknown error')}\033[0m")
-			return
-
-		print(f"\n\033[1;32m✓ Kjer v{new_version} downloaded and applied successfully.\033[0m")
-		print()
-		print("\033[1;36m→ Reinitializing Kjer…\033[0m")
-		reinit_result = BackendAPI.reinitialize()
-
-		if reinit_result.get('success'):
-			print(f"\n\033[1;32m✓ Kjer has been upgraded to v{new_version} and reinitialized successfully.\033[0m")
-		else:
-			print("\n\033[1;33m⚠ Upgrade applied but reinitialization encountered an issue.\033[0m")
-			err = reinit_result.get('error') or reinit_result.get('message') or ''
-			if err:
-				print(f"  {err}")
-			print("  You can try reinitializing from the GUI if the issue persists.")
-	else:
-		# Same version or no version returned — just a key renewal/reactivation
-		_save_license_key_cache(raw, result)
-		print(f"\n\033[1;32m✓ License reactivated successfully.\033[0m")
-		if result.get('message'):
-			print(f"  {result['message']}")
+	ltype = (result.get('license_type') or result.get('type') or 'personal').lower()
+	tier_label = 'Enterprise' if ltype == 'enterprise' else 'Personal'
+	print(f"\n\033[1;32m✓ {tier_label} License activated successfully!\033[0m")
+	if result.get('expires_at'):
+		print(f"  Expires: {result['expires_at']}")
+	if result.get('message'):
+		print(f"  {result['message']}")
 
 
 def uninitialize_kjer():
@@ -1566,7 +1535,7 @@ def print_help():
 	print("  \033[1;32m--install,   -i\033[0m     Install all Kjer dependencies (first-time setup)")
 	print("  \033[1;32m--status,    -s\033[0m     Show activation & system status")
 	print("  \033[1;32m--list,      -l\033[0m     List available tools")
-	print("  \033[1;32m--upgrade,   -u\033[0m     Upgrade Kjer with a new license key")
+	print("  \033[1;32m--upgrade,   -u\033[0m     Change or renew Kjer license tier (Personal / Enterprise)")
 	print("  \033[1;32m--scan,      -S\033[0m     Run a security scan using installed tools")
 	print("  \033[1;32m--defend,    -D\033[0m     Activate defensive measures using installed tools")
 	print("  \033[1;32m--analyze,   -a\033[0m     Run full system analysis & compatibility report")
@@ -1595,7 +1564,7 @@ def print_help():
 	print("    kjer --scan            Run security scan (installed tools)")
 	print("    kjer --defend          Activate defenses (installed tools)")
 	print("    kjer --gui             Open the GUI")
-	print("    kjer --upgrade         Upgrade license tier")
+	print("    kjer --upgrade         Change or renew license tier")
 	print("    kjer --version         Show version")
 	print()
 	print("  \033[1;36mmacOS:\033[0m")

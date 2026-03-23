@@ -1,6 +1,9 @@
 # Kjer — Professional Cybersecurity Tool Management Platform
 
-**Version 1.0.0** · PhanesGuild Software · [https://phanesguild.com/kjer](https://phanesguild.com/kjer)
+**Version 1.1** · PhanesGuild Software · [https://phanesguild.com/kjer](https://phanesguild.com/kjer)
+
+> **GitHub:** [PhanesGuildSoftware/Kjer](https://github.com/PhanesGuildSoftware/Kjer)  
+> **Updates:** [PhanesGuildSoftware/Kjer-upgrades](https://github.com/PhanesGuildSoftware/Kjer-upgrades)
 
 ---
 
@@ -88,7 +91,7 @@ kjer --status
 kjer --list
 kjer                          # opens interactive menu
 
-# Upgrade to a higher license tier
+# Change tier or renew your license
 kjer --upgrade
 ```
 
@@ -130,22 +133,40 @@ kjer --list
 | 📦 **Real Installations** | Uses apt / dnf / pacman / zypper / winget — no simulations |
 | 🖥️ **Professional GUI** | Dark theme, Electron-based, OS-adaptive tool display |
 | 💻 **Full CLI** | Complete command-line interface for power users |
-| 🧩 **Profile-Based** | Install entire security suites with one command |
+| 🧩 **Profile-Based** | Install entire security suites with one command — tier-limited |
 | 🔍 **Smart OS Detection** | Auto-detects distro and selects compatible tools |
-| ⬆️ **License Upgrades** | Upgrade tiers without reinstalling via `kjer --upgrade` |
+| 🌐 **Network Management** | Discover, monitor, and defend LAN devices remotely |
+| 🔗 **Peer Approval System** | Device connection requests require owner approval — no silent access |
+| 🏷️ **Four License Tiers** | Personal, Home, Enterprise, and Industrial — hardware-bound, purchased via Stripe |
+| 🔄 **Auto-Update Check** | Checks GitHub Releases for newer versions on startup |
+| 🔎 **7-Phase Smart Scan** | Network · Vulnerability · Malware · File Integrity · Memory Forensics · Compliance · SIEM |
+| 🛡️ **7-Phase Smart Defense** | Real hardening commands: scanner service restore, firewall, IPS, AV, access control, file integrity, audit |
+| 📊 **Report Wizard** | Export scan + defense results as PDF, HTML, Markdown, or plain text |
+| 🔬 **Compliance Audit** | Lynis, CIS-CAT, osquery, auditd, TIGER — gaps surfaced with actionable hardening steps |
+| 🧬 **Chkrootkit False-Positive Detection** | Identify promiscuous mode (IDS/sniffer) as root cause; cross-verify with debsums + rkhunter |
+| 🗄️ **AIDE Auto-Init** | Defend auto-initializes the AIDE integrity database when it doesn't exist |
+| 🌍 **Vuln Scanner Service Management** | GVM, OpenVAS, Nessus services auto-started by Defend when found stopped/failed |
 
 ---
 
-## 🆚 Kjer vs HakPak
+## 💳 License Tiers
 
-| Feature | HakPak (Free) | Kjer (Premium) |
-|---------|---------------|----------------|
-| Price | Free | $99–$999/yr |
-| License | Open source | Commercial |
-| Real Installs | Linux only | Cross-platform |
-| GUI | No | Electron (dark theme) |
-| Piracy Protection | None | Hardware-bound |
-| Support | Community | Professional |
+| Feature | Personal | Home | Enterprise | Industrial |
+|---------|----------|------|------------|------------|
+| Devices | 1 | 7 | 25 | 100 |
+| Custom Profiles | 3 | 15 | 50 | 100 |
+| Network Management | ✓ | ✓ | ✓ | ✓ |
+| Hardware-Bound | ✓ | ✓ | ✓ | ✓ |
+| Stripe Purchase | ✓ | ✓ | ✓ | ✓ |
+| GUI & CLI | ✓ | ✓ | ✓ | ✓ |
+| Support | Standard | Standard | Priority | Priority |
+| Purchase | [phanesguild.com/kjer](https://phanesguild.com/kjer) | [phanesguild.com/kjer](https://phanesguild.com/kjer) | [phanesguild.com/kjer](https://phanesguild.com/kjer) | [phanesguild.com/kjer](https://phanesguild.com/kjer) |
+
+**License key format:**
+- `KJER-XXXX-...` — Personal
+- `KJER-HOM-...` — Home
+- `KJER-ENT-...` — Enterprise
+- `KJER-IND-...` — Industrial
 
 ---
 
@@ -177,9 +198,7 @@ Critical Python files in `lib/` are protected with PyArmor (obfuscated + root-ow
 | Document | Description |
 |----------|-------------|
 | [docs/LINUX_CLI_GUIDE.md](docs/LINUX_CLI_GUIDE.md) | Linux CLI deep dive |
-| [docs/ARCHITECTURE_DEEP_DIVE.md](docs/ARCHITECTURE_DEEP_DIVE.md) | Internal architecture |
-| [docs/VERSIONING_AND_UPGRADES.md](docs/VERSIONING_AND_UPGRADES.md) | License tiers & upgrade paths |
-| [docs/BUSINESS_MODEL_AND_EXAMPLES.md](docs/BUSINESS_MODEL_AND_EXAMPLES.md) | Pricing & use-case examples |
+
 
 ---
 

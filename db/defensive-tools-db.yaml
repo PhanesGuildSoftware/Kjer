@@ -18,6 +18,9 @@ defense:
       dependencies_size_mb: 3.0
       ram_required_mb: 64
     dependencies: []
+    install_source: pkg
+    run_via: daemon
+    service_name: fail2ban
     config_file: /etc/fail2ban/jail.local
     
   chkrootkit:
@@ -34,6 +37,9 @@ defense:
       dependencies_size_mb: 2.0
       ram_required_mb: 128
     dependencies: []
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [chkrootkit, -q]
     
   rkhunter:
     binary: rkhunter
@@ -49,6 +55,9 @@ defense:
       dependencies_size_mb: 2.5
       ram_required_mb: 96
     dependencies: []
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [rkhunter, --check, --skip-keypress, --no-emails, --quiet]
     config_file: /etc/rkhunter.conf
     
   apparmor:
@@ -65,6 +74,9 @@ defense:
       dependencies_size_mb: 4.0
       ram_required_mb: 128
     dependencies: [libapparmor1]
+    install_source: pkg
+    run_via: daemon
+    service_name: apparmor
     
   ufw:
     binary: ufw
@@ -80,6 +92,9 @@ defense:
       dependencies_size_mb: 1.0
       ram_required_mb: 32
     dependencies: []
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [ufw, status, verbose]
 
 # Hardening/Detection Tools
 hardening:
@@ -97,6 +112,9 @@ hardening:
       dependencies_size_mb: 2.0
       ram_required_mb: 64
     dependencies: []
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [lynis, audit, system, --no-colors, --quiet]
     config_file: /etc/lynis/default.prf
     
   aide:
@@ -113,6 +131,9 @@ hardening:
       dependencies_size_mb: 3.5
       ram_required_mb: 256
     dependencies: []
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [aide, --check]
     config_file: /etc/aide/aide.conf
     
   tiger:
@@ -129,6 +150,9 @@ hardening:
       dependencies_size_mb: 2.0
       ram_required_mb: 96
     dependencies: [gawk, grep, perl]
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [tiger]
     
   tripwire:
     binary: tripwire
@@ -144,6 +168,9 @@ hardening:
       dependencies_size_mb: 2.5
       ram_required_mb: 128
     dependencies: []
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [tripwire, --check]
     config_file: /etc/tripwire/tw.pol
 
 # Event Auditing Tools
@@ -162,6 +189,9 @@ auditing:
       dependencies_size_mb: 1.5
       ram_required_mb: 128
     dependencies: []
+    install_source: pkg
+    run_via: daemon
+    service_name: auditd
     config_file: /etc/audit/audit.rules
     
 # EDR/Detection Tools
@@ -180,6 +210,9 @@ edr:
       dependencies_size_mb: 150.0
       ram_required_mb: 512
     dependencies: [curl, wget]
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [clamscan, -r, --infected, --no-summary, /home, /tmp, /var/tmp]
     virus_db: /var/lib/clamav/
 
 # Monitoring/Response Tools
@@ -198,7 +231,195 @@ monitoring:
       dependencies_size_mb: 20.0
       ram_required_mb: 256
     dependencies: []
+    install_source: repo
+    run_via: direct
+    run_cmd: [osqueryi, '--json', 'SELECT name,pid,path FROM processes WHERE on_disk=0 LIMIT 20;']
     config_file: /etc/osquery/osquery.conf
+
+# Extra Defense Tools
+  selinux:
+    binary: sestatus
+    # sestatus belongs to policycoreutils (a system dep that is never removed).
+    # active_check_pattern ensures we verify enforcement is ON, not just that
+    # the binary exists on PATH after selinux packages have been uninstalled.
+    active_check_pattern: "SELinux status:\\s+enabled"
+    description: "Security-Enhanced Linux mandatory access control (NSA)"
+    packages:
+      apt: selinux-basics selinux-policy-default
+      dnf: selinux-policy selinux-policy-targeted
+    tags: [mac, mandatory-access-control, defense, hardening]
+    metrics:
+      estimated_size_mb: 15
+      dependencies_size_mb: 50
+      ram_required_mb: 128
+    dependencies: []
+    install_source: pkg
+    run_via: kjer
+    run_cmd: [sestatus]
+    config_file: /etc/selinux/config
+
+# Network Security Monitoring Tools
+network:
+  wireshark:
+    binary: tshark
+    description: "Network protocol analyzer and packet capture tool"
+    packages:
+      apt: wireshark tshark
+      dnf: wireshark
+      pacman: wireshark-cli
+      zypper: wireshark
+    tags: [network-analysis, packet-capture, monitoring, forensics]
+    metrics:
+      estimated_size_mb: 120
+      dependencies_size_mb: 50
+      ram_required_mb: 512
+    dependencies: []
+    install_source: pkg
+    run_via: direct
+    run_cmd: [tshark, -D]
+
+  suricata:
+    binary: suricata
+    description: "Open source IDS/IPS and network security monitoring engine"
+    packages:
+      apt: suricata
+      dnf: suricata
+      pacman: suricata
+      zypper: suricata
+    tags: [ids, ips, network-monitoring, detection]
+    metrics:
+      estimated_size_mb: 180
+      dependencies_size_mb: 100
+      ram_required_mb: 512
+    dependencies: []
+    install_source: pkg
+    run_via: daemon
+    service_name: suricata
+    config_file: /etc/suricata/suricata.yaml
+
+  zeek:
+    binary: zeek
+    description: "Network security monitoring framework - protocol analysis and logging"
+    packages:
+      apt: zeek
+      dnf: zeek
+    tags: [network-monitoring, ids, detection, nsm]
+    metrics:
+      estimated_size_mb: 280
+      dependencies_size_mb: 100
+      ram_required_mb: 1024
+    dependencies: []
+    install_source: repo
+    repo_setup:
+      apt:
+        gpg_url: "https://download.opensuse.org/repositories/security:/zeek/xUbuntu_{DISTRO_VERSION}/Release.key"
+        gpg_dest: "/etc/apt/trusted.gpg.d/zeek.gpg"
+        repo_line: "deb [signed-by=/etc/apt/trusted.gpg.d/zeek.gpg] http://download.opensuse.org/repositories/security:/zeek/xUbuntu_{DISTRO_VERSION}/ /"
+        repo_file: "/etc/apt/sources.list.d/zeek.list"
+        version_fallbacks: ["24.04", "22.04", "20.04"]
+    run_via: daemon
+    service_name: zeek
+
+# SIEM / Log Management Tools
+siem:
+  elastic-stack:
+    binary: elasticsearch
+    description: "Elasticsearch + Logstash + Kibana - open source SIEM and log management"
+    packages:
+      apt: elasticsearch logstash kibana
+    tags: [siem, log-management, monitoring, detection]
+    metrics:
+      estimated_size_mb: 950
+      dependencies_size_mb: 200
+      ram_required_mb: 4096
+    dependencies: []
+    install_source: repo
+    repo_setup:
+      apt:
+        gpg_url: "https://artifacts.elastic.co/GPG-KEY-elasticsearch"
+        gpg_dest: "/usr/share/keyrings/elasticsearch-keyring.gpg"
+        repo_line: "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main"
+        repo_file: "/etc/apt/sources.list.d/elastic-8.x.list"
+    run_via: daemon
+    service_name: elasticsearch
+
+  splunk:
+    binary: splunk
+    description: "Splunk Enterprise - data analytics and SIEM platform"
+    packages: {}
+    tags: [siem, log-management, monitoring, analytics]
+    metrics:
+      estimated_size_mb: 1200
+      dependencies_size_mb: 0
+      ram_required_mb: 4096
+    dependencies: []
+    install_source: download
+    download_install:
+      linux_amd64:
+        url: "https://download.splunk.com/products/splunk/releases/9.3.2/linux/splunk-9.3.2-d8d57d6aefda-linux-2.6-amd64.deb"
+        method: dpkg
+        filename: "splunk.deb"
+        size_hint_mb: 1200
+        install_page: "https://www.splunk.com/en_us/download/splunk-enterprise.html"
+    run_via: daemon
+    service_name: splunk
+
+# Vulnerability Assessment Tools
+vulnerability:
+  openvas:
+    binary: openvas
+    description: "OpenVAS - open source vulnerability assessment system via Greenbone"
+    packages:
+      apt: gvm
+      dnf: openvas
+    tags: [vulnerability-scanning, assessment, network-scanning]
+    metrics:
+      estimated_size_mb: 650
+      dependencies_size_mb: 200
+      ram_required_mb: 2048
+    dependencies: []
+    install_source: pkg
+    run_via: daemon
+    service_name: ospd-openvas
+
+  gvm:
+    binary: gvmd
+    description: "Greenbone Vulnerability Management - comprehensive vulnerability management platform"
+    packages:
+      apt: gvm
+      dnf: gvm
+    tags: [vulnerability-management, scanning, assessment]
+    metrics:
+      estimated_size_mb: 120
+      dependencies_size_mb: 200
+      ram_required_mb: 2048
+    dependencies: []
+    install_source: pkg
+    run_via: daemon
+    service_name: gvmd
+
+  nessus:
+    binary: nessusd
+    description: "Nessus Professional - industry-leading vulnerability scanner by Tenable"
+    packages: {}
+    tags: [vulnerability-scanning, assessment, compliance]
+    metrics:
+      estimated_size_mb: 850
+      dependencies_size_mb: 0
+      ram_required_mb: 2048
+    dependencies: []
+    install_source: download
+    download_install:
+      linux_amd64:
+        url: ""
+        method: dpkg
+        filename: "nessus.deb"
+        size_hint_mb: 850
+        fetch_api: "https://www.tenable.com/downloads/api/v1/public/pages/nessus"
+        api_filter: "linux-amd64.deb"
+        install_page: "https://www.tenable.com/downloads/nessus"
+    run_via: daemon
+    service_name: nessusd
 
 # Profile Definitions (Pre-configured tool sets)
 profiles:

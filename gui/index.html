@@ -22,6 +22,10 @@
                 <div class="logo">
                     <img src="kjer_logo.PNG" alt="Kjer Framework" class="logo-icon">
                     <p class="logo-version" id="sidebarVersion">—</p>
+                    <button onclick="checkForKjerUpdates(false)" id="sidebarUpdateBtn"
+                        style="display:block; margin: 6px auto 0 auto; padding: 4px 14px; font-size: 11px; font-family: inherit; background: rgba(176,224,230,.08); border: 1px solid rgba(176,224,230,.25); color: #B0E0E6; border-radius: 4px; cursor: pointer; letter-spacing: .04em; text-align:center; transition: background .2s, border-color .2s, color .2s;">
+                        <i class="icon icon-refresh" style="font-size:10px;"></i> Updates
+                    </button>
                     <div class="network-status" id="networkStatus">
                         <span id="statusIcon">⟳</span>
                         <span id="statusText">Connecting</span>
@@ -33,6 +37,9 @@
                     </button>
                     <button class="nav-item geo-regular" data-tab="tools" onclick="switchTab('tools')">
                         <i class="icon icon-tools"></i> Tools
+                    </button>
+                    <button class="nav-item geo-regular" data-tab="network" onclick="switchTab('network')">
+                        <i class="icon icon-network"></i> Network
                     </button>
                     <button class="nav-item geo-regular" data-tab="profiles" onclick="switchTab('profiles')">
                         <i class="icon icon-profiles"></i> Profiles
@@ -96,13 +103,18 @@
                         </div>
                         <div class="card">
                             <h3>License Status</h3>
-                            <p class="status-badge" id="licenseStatusBadge"><span id="licenseStatusText">[Free]</span></p>
+                            <p class="status-badge" id="licenseStatusBadge"><span id="licenseStatusText">[Not Activated]</span></p>
                             <p class="small" id="licenseVersionText">Activate to unlock features</p>
                         </div>
                         <div class="card">
                             <h3>Storage</h3>
                             <p class="stat-number" id="dashStorageAvail" style="font-size:22px;">—</p>
                             <p class="small">Available of <span id="dashStorageTotal">—</span> total</p>
+                        </div>
+                        <div class="card">
+                            <h3>Memory (RAM)</h3>
+                            <p class="stat-number" id="dashRamAvail" style="font-size:22px;">—</p>
+                            <p class="small">Available of <span id="dashRamTotal">—</span> total</p>
                         </div>
                     </div>
                 </div>
@@ -123,6 +135,7 @@
                             Select All
                         </label>
                         <span id="selectedToolsCount" class="selected-count">0 selected</span>
+                        <span id="selectedStorageSize" class="selected-storage-size"></span>
                         <button class="btn btn-primary btn-small" id="installSelectedBtn" onclick="installSelectedTools()" disabled style="margin-left:auto;">
                             <i class="icon icon-download"></i> Install Selected
                         </button>
@@ -145,6 +158,14 @@
                     </div>
                     <div id="toolsList" class="tools-grid">
                         <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Profiles Tab -->
+                <!-- Network Tab -->
+                <div id="network" class="tab-content">
+                    <div id="networkPageContainer">
+                        <!-- Rendered by renderNetworkPage() in app.js -->
                     </div>
                 </div>
 
@@ -177,7 +198,7 @@
                             </div>
                             <div class="metric">
                                 <span class="metric-label">License Status</span>
-                                <span class="metric-value" id="statusPageLicense">[Free]</span>
+                                <span class="metric-value" id="statusPageLicense">[Not Activated]</span>
                             </div>
                         </div>
                     </div>
@@ -195,6 +216,25 @@
                 <!-- Settings Tab -->
                 <div id="settings" class="tab-content">
                     <h2 class="page-header">Settings & Configuration</h2>
+
+                    <div class="card" style="text-align: center;">
+                        <h3 class="container-title">Kjer Application Updates</h3>
+                        <p style="color: #1a1a1a; margin: 10px 0 4px 0; font-size: 13px;">
+                            Installed version: <strong id="kjCurrentVersion">—</strong>
+                        </p>
+                        <p id="kjUpdateStatus" style="color: #888; font-size: 12px; margin: 0 0 14px 0;">—</p>
+                        <button class="btn btn-primary" id="kjCheckUpdateBtn" onclick="checkForKjerUpdates(false)" style="min-width:180px; display:block; margin:0 auto;">
+                            <i class="icon icon-refresh"></i> Check for Updates
+                        </button>
+                        <div style="margin-top: 14px;">
+                            <label style="display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; color: #888; cursor: pointer;">
+                                <input type="checkbox" id="autoCheckUpdatesToggle" onchange="localStorage.setItem('autoCheckUpdates', this.checked ? 'true' : 'false')"
+                                    style="accent-color: #9D4EDD;">
+                                Check for updates automatically on startup
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="settings-section">
                         <h3>Documentation & Resources</h3>
                         <button class="btn btn-primary" onclick="openManual()" style="display: block; margin: 0 auto 20px auto;">View Kjer Manual & Tool Documentation</button>
@@ -268,7 +308,50 @@
                                 <td>Available Disk</td>
                                 <td id="sysInfoDiskAvail">—</td>
                             </tr>
+                            <tr>
+                                <td>Total RAM</td>
+                                <td id="sysInfoRamTotal">—</td>
+                            </tr>
+                            <tr>
+                                <td>Available RAM</td>
+                                <td id="sysInfoRamAvail">—</td>
+                            </tr>
+                            <tr>
+                                <td>CPU Cores</td>
+                                <td id="sysInfoCpuCount">—</td>
+                            </tr>
+                            <tr>
+                                <td>Hostname</td>
+                                <td id="sysInfoHostname">—</td>
+                            </tr>
+                            <tr>
+                                <td>Kernel</td>
+                                <td id="sysInfoKernel">—</td>
+                            </tr>
+                            <tr>
+                                <td>Architecture</td>
+                                <td id="sysInfoArch">—</td>
+                            </tr>
                         </table>
+                    </div>
+
+                    <div class="settings-section" id="sudoSetupSection">
+                        <h3>Passwordless Installs <small style="font-size:12px; font-weight:normal; color:#9D4EDD;">(Linux)</small></h3>
+                        <p style="color:#1a1a1a; font-size:13px; margin-bottom:12px;">
+                            Kjer needs to run package managers (<code>apt-get</code>, <code>dnf</code>, etc.) as root to install security tools.
+                            Configure this once so tools install without password prompts.
+                        </p>
+                        <div style="display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap;">
+                            <span style="font-size:13px; color:#1a1a1a;">Status:</span>
+                            <span id="sudoStatusBadge" style="font-weight:600; font-size:13px;">Checking…</span>
+                            <button id="setupSudoBtn" class="btn btn-primary" onclick="runSudoSetup()" style="font-size:13px; padding:6px 16px;">
+                                Setup Passwordless Installs
+                            </button>
+                        </div>
+                        <p style="color:#888; font-size:11px; margin-top:10px;">
+                            This writes <code>/etc/sudoers.d/kjer</code> granting your user NOPASSWD access to package manager binaries only.
+                            It is automatically configured when you run the installer as root.
+                        </p>
                     </div>
 
                     <div class="settings-section">
@@ -290,16 +373,14 @@
                     </div>
 
                     <div class="card" style="text-align: center;">
-                        <h3 class="container-title">Version & Upgrades</h3>
-                        <p style="color: #1a1a1a; margin: 15px 0 5px 0; font-size: 13px;">Current version: <strong id="currentVersionDisplay">—</strong></p>
+                        <h3 class="container-title">License & Tier Management</h3>
+                        <p style="color: #1a1a1a; margin: 15px 0 5px 0; font-size: 13px;">License tier: <strong id="currentVersionDisplay">—</strong></p>
                         <p style="color: #9D4EDD; margin: 0 0 15px 0; font-size: 11px; font-weight: 600;" id="currentVersionType">—</p>
-                        <p style="color: #1a1a1a; margin: 15px 0 5px 0; font-size: 13px;">Accessible version: <strong id="accessibleVersionDisplay">—</strong></p>
-                        <p style="color: #1a1a1a; margin-bottom: 15px; font-size: 12px;">Unlock more tools by upgrading</p>
-                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <input type="text" id="upgradeKeyInput" class="form-input" placeholder="KJER-UPGRADE-XXXX-XXXX-XXXX" maxlength="28" style="flex: 1; text-transform: uppercase; font-family: monospace;">
-                            <button class="btn btn-primary" onclick="applyUpgradeKey()" style="flex: 0.5;">Apply</button>
-                        </div>
-                        <button class="btn btn-primary" onclick="checkAvailableTools()" style="display: block; margin: 0 auto; background-color: rgba(33, 150, 243, 0.3); border-color: #2196F3; color: #2196F3;">View Available Tools</button>
+                        <p style="color: #1a1a1a; margin: 15px 0 5px 0; font-size: 13px;">Status: <strong id="accessibleVersionDisplay">—</strong></p>
+                        <p style="color: #1a1a1a; margin-bottom: 15px; font-size: 12px;">Purchase a license at <a href="https://phanesguild.com/kjer" style="color:#9D4EDD;">phanesguild.com/kjer</a></p>
+                        <button class="btn btn-outline" onclick="showActivationModal()" style="font-size: 12px; display: block; margin: 0 auto;">
+                            <i class="icon icon-key"></i> Re-enter License Key
+                        </button>
                     </div>
 
                     <div class="card" style="text-align: center;">
@@ -317,7 +398,8 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>&copy; 2026 Kjer Framework - Professional Security Tools | <a href="#">Documentation</a> | <a href="#">Support</a> | <a href="#">Privacy</a></p>
+            <p>&copy; 2026 Kjer &mdash; Professional Security Tools &nbsp;|&nbsp; <a href="#">Documentation</a> | <a href="#">Support</a> | <a href="#">Privacy</a></p>
+            <p style="margin-top: 4px; font-size: 11px; opacity: 0.6;">Made by <strong>PhanesGuild Software</strong></p>
         </footer>
     </div>
 
@@ -342,16 +424,19 @@
     <div id="activationModal" class="modal" style="display: none;">
         <div class="modal-content">
             <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h2 class="page-header" style="margin: 0; flex: 1; text-align: center;">KJER UPGRADE</h2>
-                <button onclick="closeActivationModal()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Close">&times;</button>
+                <h2 class="page-header" style="margin: 0; flex: 1; text-align: center;">LICENSE ACTIVATION</h2>
+                <button id="activationModalCloseBtn" onclick="closeActivationModal()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;" title="Close">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="color: #1a1a1a; margin-bottom: 20px; text-align: center;">
-                    Enter your license key to activate or upgrade Kjer. Each license is bound to this machine.
+                <p style="color: var(--text-primary, #1a1a1a); margin-bottom: 8px; text-align: center;">
+                    Enter your license key to activate Kjer. Each key unlocks all features for its tier and is bound to this machine.
+                </p>
+                <p style="color: #9D4EDD; margin-bottom: 16px; text-align: center; font-size: 12px;">
+                    Personal key &nbsp;·&nbsp; Enterprise key &nbsp;·&nbsp; One key per tier, all features included.
                 </p>
                 <div class="form-group">
                     <label style="color: #9D4EDD;">License Key</label>
-                    <input type="text" id="licenseKeyInput" class="form-input" placeholder="KJER-VERSION-XXXX-XXXX-XXXX" maxlength="28" style="text-transform: uppercase; font-family: monospace;">
+                    <input type="text" id="licenseKeyInput" class="form-input" placeholder="KJER-XXXX-XXXX-XXXX-XXXX" maxlength="24" style="text-transform: uppercase; font-family: monospace;" onkeydown="if(event.key==='Enter') activateKjer()">
                 </div>
                 <button class="btn btn-primary" onclick="activateKjer()" style="width: 100%; margin-top: 20px;">
                     <i class="icon icon-check"></i> Apply Key

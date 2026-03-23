@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAppPath: () =>
         ipcRenderer.invoke('get-app-path'),
 
+    getPythonBin: () =>
+        ipcRenderer.invoke('get-python-bin'),
+
     /**
      * Read Kjer/version.json — the canonical version of the installed app.
      * @returns {Promise<{success:boolean, data:{version,channel,...}|null}>}
@@ -68,10 +71,76 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('save-activity-log', content),
 
     /**
+     * Validate a supplied key against the dev key file on disk.
+     * Returns { valid: boolean } — the actual key is never sent back.
+     * Also sets the in-memory auth session in main process on success.
+     * @param {string} key
+     * @returns {Promise<{valid:boolean}>}
+     */
+    validateDevKey: (key) =>
+        ipcRenderer.invoke('validate-dev-key', key),
+
+    /**
+     * Get the current auth session from the main process.
+     * Use this for all feature gate decisions — never trust localStorage for gates.
+     * @returns {Promise<{authorized:boolean, licenseType:string, displayVersion:string}>}
+     */
+    getAuthSession: () =>
+        ipcRenderer.invoke('get-auth-session'),
+
+    /**
+     * Set the auth session in the main process from a validated regular license key.
+     * @param {{authorized:boolean, licenseType:string, displayVersion:string}} data
+     * @returns {Promise<{success:boolean}>}
+     */
+    setLicenseAuth: (data) =>
+        ipcRenderer.invoke('set-license-auth', data),
+
+    /**
      * Register a callback invoked by main when the app is about to quit.
      * Use this to trigger auto-save of the activity log.
      * @param {Function} callback
      */
     onBeforeQuit: (callback) =>
         ipcRenderer.on('app-before-quit', callback),
+
+    /**
+     * Send a connection request to a remote Kjer device.
+     * @param {{targetIP, requestId, requesterName, requesterIP}} data
+     */
+    sendConnectionRequest: (data) =>
+        ipcRenderer.invoke('send-connection-request', data),
+
+    /**
+     * Send an approval or denial back to the requesting device.
+     * @param {{targetIP, requestId, approved, approverName}} data
+     */
+    sendConnectionResponse: (data) =>
+        ipcRenderer.invoke('send-connection-response', data),
+
+    /** Get all pending incoming connection requests (pre-window-ready). */
+    getPendingRequests: () =>
+        ipcRenderer.invoke('get-pending-requests'),
+
+    /** Remove a handled pending request from the main-process queue. */
+    clearPendingRequest: (requestId) =>
+        ipcRenderer.invoke('clear-pending-request', requestId),
+
+    /**
+     * Write a text file to disk (used by report generation).
+     * Supports ~ for home directory.
+     * @param {string} filePath - destination path (may start with ~)
+     * @param {string} content  - file contents
+     * @returns {Promise<{success:boolean, filePath?:string, error?:string}>}
+     */
+    writeFile: (filePath, content) =>
+        ipcRenderer.invoke('write-file', filePath, content),
+
+    /** Listen for incoming connection requests pushed from the main process. */
+    onConnectionRequest: (callback) =>
+        ipcRenderer.on('kjer-connection-request', (_event, data) => callback(data)),
+
+    /** Listen for connection responses (approval/denial) from remote devices. */
+    onConnectionResponse: (callback) =>
+        ipcRenderer.on('kjer-connection-response', (_event, data) => callback(data)),
 });
