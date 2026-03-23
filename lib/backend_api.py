@@ -1485,7 +1485,74 @@ def cmd_install_batch(args):
     }
 
 
-def cmd_defend_tool(args):
+def _run_chkrootkit_defend():
+    """Run the full chkrootkit cross-verification defend sequence.
+    Called from cmd_defend_tool inside a try/except TimeoutExpired block.
+    """
+    checks = []
+    # Step 1: re-run chkrootkit to capture current flagged items
+    ck_r = run_privileged(['chkrootkit', '-q'], timeout=60)
+    infected_lines = [
+        l.strip() for l in (ck_r.stdout or '').splitlines()
+        if 'infected' in l.lower()
+    ]
+    # Step 2: promiscuous mode — most common false positive cause
+    # Suricata, Wireshark, tcpdump all put the NIC in promiscuous mode,
+    # which chkrootkit's ifpromisc/sniffer check flags as INFECTED.
+    ip_r = run_privileged(['ip', 'link', 'show'], timeout=10)
+    promisc = ip_r.returncode == 0 and 'PROMISC' in (ip_r.stdout or '').upper()
+    if promisc:
+        checks.append(
+            'Promiscuous mode DETECTED on NIC — IDS/sniffer tool (e.g. Suricata) '
+            'is active: this is the most common cause of chkrootkit false positives'
+        )
+    # Step 3: verify binary integrity so we know if system files are actually modified
+    if shutil.which('debsums'):
+        db_r = run_privileged(['debsums', '-s'], timeout=90)
+        if not (db_r.stdout or '').strip():
+            checks.append('Package integrity (debsums): all system binaries match official checksums — no tampering')
+        else:
+            mm = (db_r.stdout or '').strip()[:200]
+            checks.append(f'Package integrity (debsums): mismatches found — {mm}')
+    elif shutil.which('rpm'):
+        rpm_r = run_privileged(['rpm', '-Va', '--nodeps'], timeout=90)
+        if not (rpm_r.stdout or '').strip():
+            checks.append('Package integrity (rpm -Va): system files unmodified')
+        else:
+            checks.append('Package integrity (rpm -Va): some mismatches — review rpm output')
+    # Step 4: rkhunter cross-check
+    if shutil.which('rkhunter'):
+        rk_r = run_privileged(['rkhunter', '--check', '--skip-keypress', '--quiet'], timeout=120)
+        if rk_r.returncode == 0:
+            checks.append('Rkhunter cross-check: no rootkits or backdoors confirmed')
+        else:
+            # rkhunter exits non-zero when warnings are found (normal on IDS systems)
+            warn_n = len(re.findall(r'\bwarning\b', (rk_r.stdout or '').lower()))
+            checks.append(f'Rkhunter cross-check: {warn_n} warning(s) — review /var/log/rkhunter.log')
+    # Compose verdict
+    detail = ' | '.join(checks) if checks else 'no cross-verification tools found; run debsums or rkhunter manually'
+    if infected_lines and promisc:
+        verdict = (
+            f'{len(infected_lines)} flagged pattern(s) — LIKELY FALSE POSITIVES '
+            'from IDS promiscuous mode (Suricata/Wireshark/tcpdump)'
+        )
+        verdict_level = 'info'
+    elif infected_lines:
+        verdict = (
+            f'{len(infected_lines)} pattern(s) persist after cross-check; '
+            'if package integrity passed these may also be false positives — '
+            'boot from live USB for definitive verification'
+        )
+        verdict_level = 'warning'
+    else:
+        verdict = 'Second-pass clean — rootkit signatures not confirmed'
+        verdict_level = 'success'
+    return {
+        'success': True, 'tool': 'chkrootkit', 'level': verdict_level,
+        'steps_run': 4, 'steps_ok': 4,
+        'summary': f'{verdict} | {detail}',
+        'results': [{'cmd': 'chkrootkit -q', 'rc': ck_r.returncode}],
+    }
     """Apply real security hardening for an installed tool and return a structured result."""
     tool_name = (args.tool or '').strip()
     if not tool_name:
@@ -1556,18 +1623,60 @@ def cmd_defend_tool(args):
         }
 
     # ── TRIPWIRE — check and return specific message if not configured ───────────────────
+    # IMPORTANT: tripwire --check opens /dev/tty directly to ask for the site-key
+    # passphrase when policy/database files are encrypted.  stdin=DEVNULL does NOT
+    # prevent this — it will hang indefinitely waiting for tty input.
+    # We therefore check for the required files before ever calling the binary,
+    # and wrap the call in a tight timeout with an explicit TimeoutExpired handler.
     if tool_name == 'tripwire':
         if not shutil.which('tripwire'):
             return {
                 'success': False,
                 'error': 'tripwire binary not found on PATH',
             }
-        r = run_privileged(['tripwire', '--check'], timeout=60)
+        # Pre-flight: require both a config file and at least one database file.
+        # If either is missing, tripwire --check would hang or error immediately.
+        import glob as _glob
+        cfg_exists = any(os.path.exists(p) for p in (
+            '/etc/tripwire/tw.cfg',
+            '/etc/tripwire/tripwire.cfg',
+        ))
+        db_exists_tw = bool(
+            _glob.glob('/var/lib/tripwire/*.twd') or
+            _glob.glob('/var/lib/tripwire/*.twd.gz')
+        )
+        if not cfg_exists or not db_exists_tw:
+            return {
+                'success': True, 'tool': tool_name, 'level': 'warning',
+                'steps_run': 0, 'steps_ok': 0,
+                'summary': (
+                    'Tripwire not yet fully configured '
+                    '(config or database missing) — run: sudo tripwire --init'
+                ),
+                'results': [],
+            }
+        # Config and database present — run the check with a short timeout.
+        # 20 s is plenty for a non-interactive check; if it exceeds that the
+        # most likely cause is an interactive passphrase prompt via /dev/tty.
+        try:
+            r = run_privileged(['tripwire', '--check'], timeout=20)
+        except subprocess.TimeoutExpired:
+            return {
+                'success': True, 'tool': tool_name, 'level': 'warning',
+                'steps_run': 1, 'steps_ok': 0,
+                'summary': (
+                    'Tripwire check timed out — likely waiting for an '
+                    'interactive site-key passphrase via /dev/tty. '
+                    'Run manually: sudo tripwire --check'
+                ),
+                'results': [{'cmd': 'tripwire --check', 'rc': -1,
+                              'error': 'timed out after 20 s'}],
+            }
         out_l = (r.stdout or r.stderr or '').lower()
         if r.returncode != 0:
             not_configured = any(kw in out_l for kw in (
                 'not configured', 'not initialized', 'no site key',
-                'policy file', 'database does not exist', 'no database'
+                'policy file', 'database does not exist', 'no database',
             ))
             if not_configured:
                 return {
@@ -1576,8 +1685,21 @@ def cmd_defend_tool(args):
                     'summary': 'Tripwire not yet fully configured — run: sudo tripwire --init to create the policy baseline',
                     'results': [{'cmd': 'tripwire --check', 'rc': r.returncode}],
                 }
-            violations = re.search(r'modified:\s*(\d+)', out_l)
-            n = int(violations.group(1)) if violations else '?'
+            # Tripwire uses a tabular report; violation counts appear in columns.
+            # Try several patterns from different tripwire output formats.
+            def _tw_sum(pattern):
+                return sum(int(m) for m in re.findall(pattern, out_l))
+            # Format 1: "total violations found:  N"
+            total_m = re.search(r'total violations found\s*:\s*(\d+)', out_l)
+            if total_m:
+                n = int(total_m.group(1))
+            else:
+                # Format 2: column headers "Added    Removed    Modified"
+                # Each rule row contributes numbers in those columns; sum them all
+                n = _tw_sum(r'\b(\d+)\b')   # rough fallback: sum all numbers
+                # Clamp unreasonably large sums (timestamps, inode numbers etc.)
+                if n > 9999:
+                    n = '?'
             return {
                 'success': True, 'tool': tool_name, 'level': 'warning',
                 'steps_run': 1, 'steps_ok': 0,
@@ -1593,69 +1715,26 @@ def cmd_defend_tool(args):
 
     # ── CHKROOTKIT — promiscuous mode check + package integrity + rkhunter cross-verify ──
     if tool_name == 'chkrootkit':
-        checks = []
-        # Step 1: re-run chkrootkit to capture current flagged items
-        ck_r = run_privileged(['chkrootkit', '-q'], timeout=60)
-        infected_lines = [
-            l.strip() for l in (ck_r.stdout or '').splitlines()
-            if 'infected' in l.lower()
-        ]
-        # Step 2: promiscuous mode — most common false positive cause
-        # Suricata, Wireshark, tcpdump all put the NIC in promiscuous mode,
-        # which chkrootkit's ifpromisc/sniffer check flags as INFECTED.
-        ip_r = run_privileged(['ip', 'link', 'show'], timeout=10)
-        promisc = ip_r.returncode == 0 and 'PROMISC' in (ip_r.stdout or '').upper()
-        if promisc:
-            checks.append(
-                'Promiscuous mode DETECTED on NIC — IDS/sniffer tool (e.g. Suricata) '
-                'is active: this is the most common cause of chkrootkit false positives'
-            )
-        # Step 3: verify binary integrity so we know if system files are actually modified
-        if shutil.which('debsums'):
-            db_r = run_privileged(['debsums', '-s'], timeout=90)
-            if not (db_r.stdout or '').strip():
-                checks.append('Package integrity (debsums): all system binaries match official checksums — no tampering')
-            else:
-                mm = (db_r.stdout or '').strip()[:200]
-                checks.append(f'Package integrity (debsums): mismatches found — {mm}')
-        elif shutil.which('rpm'):
-            rpm_r = run_privileged(['rpm', '-Va', '--nodeps'], timeout=90)
-            if not (rpm_r.stdout or '').strip():
-                checks.append('Package integrity (rpm -Va): system files unmodified')
-            else:
-                checks.append('Package integrity (rpm -Va): some mismatches — review rpm output')
-        # Step 4: rkhunter cross-check
-        if shutil.which('rkhunter'):
-            rk_r = run_privileged(['rkhunter', '--check', '--skip-keypress', '--quiet'], timeout=120)
-            if rk_r.returncode == 0:
-                checks.append('Rkhunter cross-check: no rootkits or backdoors confirmed')
-            else:
-                warn_n = len(_re.findall(r'\bwarning\b', (rk_r.stdout or '').lower()))
-                checks.append(f'Rkhunter cross-check: {warn_n} warning(s) — review /var/log/rkhunter.log')
-        # Compose verdict
-        detail = ' | '.join(checks) if checks else 'no cross-verification tools found; run debsums or rkhunter manually'
-        if infected_lines and promisc:
-            verdict = (
-                f'{len(infected_lines)} flagged pattern(s) — LIKELY FALSE POSITIVES '
-                'from IDS promiscuous mode (Suricata/Wireshark/tcpdump)'
-            )
-            verdict_level = 'info'
-        elif infected_lines:
-            verdict = (
-                f'{len(infected_lines)} pattern(s) persist after cross-check; '
-                'if package integrity passed these may also be false positives — '
-                'boot from live USB for definitive verification'
-            )
-            verdict_level = 'warning'
-        else:
-            verdict = 'Second-pass clean — rootkit signatures not confirmed'
-            verdict_level = 'success'
-        return {
-            'success': True, 'tool': tool_name, 'level': verdict_level,
-            'steps_run': 4, 'steps_ok': 4,
-            'summary': f'{verdict} | {detail}',
-            'results': [{'cmd': 'chkrootkit -q', 'rc': ck_r.returncode}],
-        }
+        try:
+            return _run_chkrootkit_defend()
+        except subprocess.TimeoutExpired as e:
+            cmd_str = ' '.join(e.cmd) if hasattr(e, 'cmd') and e.cmd else 'unknown command'
+            return {
+                'success': True, 'tool': tool_name, 'level': 'warning',
+                'steps_run': 1, 'steps_ok': 0,
+                'summary': (
+                    f'Chkrootkit cross-verification timed out on: {cmd_str} — '
+                    'run manually: sudo chkrootkit -q'
+                ),
+                'results': [],
+            }
+        except Exception as exc:
+            return {
+                'success': True, 'tool': tool_name, 'level': 'info',
+                'steps_run': 0, 'steps_ok': 0,
+                'summary': f'Chkrootkit cross-verification error: {exc}',
+                'results': [],
+            }
 
     # Hardening command sequences keyed by tool name.
     # Each list entry is a command that will be run via run_privileged().
@@ -1725,26 +1804,32 @@ def cmd_defend_tool(args):
                 ['systemctl', 'start', 'gvmd'],
                 ['systemctl', 'start', 'ospd-openvas'],
             ],
-            'summary': 'GVM/OpenVAS services started (gvmd + ospd-openvas) — vulnerability scanning active',
+            'summary': None,  # dynamic: built from actual start results below
         },
         'openvas': {
             'cmds': [
                 ['systemctl', 'start', 'ospd-openvas'],
                 ['systemctl', 'start', 'gvmd'],
             ],
-            'summary': 'OpenVAS services started (ospd-openvas + gvmd) — vulnerability scanning active',
+            'summary': None,
         },
         'nessus': {
             'cmds': [['systemctl', 'start', 'nessusd']],
-            'summary': 'Nessus daemon started — vulnerability scanning available on port 8834',
+            'summary': None,
         },
         'lynis': {
             'cmds': [['lynis', 'audit', 'system', '--quick', '--quiet']],
             'summary': 'Lynis security audit completed — review /var/log/lynis.log for suggestions',
+            # Lynis exits 1 when suggestions/warnings are found (which is normal on any
+            # real system). Treat rc=0 or rc=1 as successful completion; only rc>=2
+            # indicates a real failure (missing database, parse error, etc.).
+            'ok_rcs': {0, 1},
         },
         'tiger': {
             'cmds': [['tiger']],
             'summary': 'TIGER security audit completed — review /var/log/tiger/ for findings',
+            # TIGER exits non-zero when it finds issues. Any completion is success.
+            'ok_rcs': {0, 1, 2},
         },
     }
 
@@ -1765,7 +1850,8 @@ def cmd_defend_tool(args):
             continue
         try:
             r = run_privileged(cmd, timeout=120)
-            if r.returncode == 0:
+            ok_rcs = step.get('ok_rcs', {0})
+            if r.returncode in ok_rcs:
                 steps_ok += 1
             cmd_results.append({
                 'cmd':    ' '.join(cmd),
@@ -1787,6 +1873,27 @@ def cmd_defend_tool(args):
 
     n_exec = len(executable)
     level = 'success' if steps_ok == n_exec else ('warning' if steps_ok > 0 else 'error')
+
+    # Build a dynamic summary for service-start tools (GVM, OpenVAS, Nessus) so the
+    # message accurately reflects whether systemctl start actually succeeded.
+    summary = step['summary']
+    if summary is None:
+        started  = [c for c in executable if c.get('rc', -1) == 0]
+        failed   = [c for c in executable if c.get('rc', -1) != 0]
+        svc_names = [c['cmd'].split()[-1] for c in executable]  # last token = service name
+        if not failed:
+            summary = f'Service(s) started successfully: {" + ".join(svc_names)} — vulnerability scanning active'
+        elif not started:
+            summary = (
+                f'Failed to start service(s): {" + ".join(svc_names)} — '
+                'check: journalctl -xe'
+            )
+            level = 'warning'  # started by defend intent rather than all-fail→error
+        else:
+            ok_s  = ' + '.join(c['cmd'].split()[-1] for c in started)
+            bad_s = ' + '.join(c['cmd'].split()[-1] for c in failed)
+            summary = f'Partial start: {ok_s} started, {bad_s} failed — check: journalctl -xe'
+
     return {
         'success':   True,
         'tool':      tool_name,
