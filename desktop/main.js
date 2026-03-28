@@ -4,6 +4,10 @@ const fs   = require('fs');
 const os   = require('os');
 const { exec, execSync } = require('child_process');
 
+// Suppress harmless GPU/VSync compositor errors on Linux (no compositor / VM)
+app.commandLine.appendSwitch('disable-gpu-vsync');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+
 // ── Resolve the best available python3 path at startup ───────────────────────
 // exec() only inherits the Node process's PATH, which may be minimal when
 // Electron is launched via a .desktop file or the kjer CLI.  Finding the
