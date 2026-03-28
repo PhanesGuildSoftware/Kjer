@@ -79,12 +79,6 @@ detect_os() {
 EOF
     chown -R "$REAL_USER" "$REAL_HOME/.kjer" 2>/dev/null || true
     ok "Install state written to $REAL_HOME/.kjer/install_state.json"
-
-    # Always clear the initialized flag on install/reinstall.
-    # A fresh install means the user must go through initialization again.
-    # Leaving a stale flag causes the GUI to show "Initialized" incorrectly.
-    rm -f "$REAL_HOME/.kjer/initialized"
-    ok "Initialization state cleared (re-initialization required)"
 }
 
 # ── Package manager helpers ──────────────────────────────────────────────────
@@ -309,6 +303,84 @@ install_electron() {
     fi
 }
 
+# ── Step 5b: Sudoers rules (Linux only) ──────────────────────────────────────
+# Write /etc/sudoers.d/kjer so the GUI and CLI can run security tools without
+# password prompts.  Mirrors the binary list in backend_api.py cmd_setup_sudo.
+setup_sudo_rules() {
+    [[ "$OS_TYPE" != "linux" ]] && return 0   # macOS uses its own privilege system
+
+    hdr "Sudoers Rules  ( /etc/sudoers.d/kjer )"
+
+    if [[ -z "${REAL_USER:-}" || "$REAL_USER" == "root" ]]; then
+        warn "Could not determine non-root user — skipping sudo rules"
+        return
+    fi
+
+    # Package managers always present in the rule
+    PKG_CMDS=""
+    for pm_path in \
+        /usr/bin/env \
+        /usr/bin/apt-get /usr/bin/apt /usr/bin/dpkg \
+        /usr/bin/dnf /usr/bin/pacman /usr/bin/zypper; do
+        if [[ -x "$pm_path" ]]; then
+            [[ -n "$PKG_CMDS" ]] && PKG_CMDS="${PKG_CMDS}, "
+            PKG_CMDS="${PKG_CMDS}${pm_path}"
+        fi
+    done
+
+    if [[ -z "$PKG_CMDS" ]]; then
+        warn "No supported package managers found — skipping sudo rules"
+        return
+    fi
+
+    # Security scanner binaries (add only present ones)
+    for scanner_path in \
+        /usr/sbin/ufw /usr/bin/ufw \
+        /usr/sbin/chkrootkit /usr/bin/chkrootkit \
+        /usr/bin/rkhunter \
+        /usr/bin/lynis /usr/sbin/lynis \
+        /usr/bin/aide /usr/sbin/aide /usr/sbin/aideinit \
+        /usr/sbin/tiger /usr/bin/tiger \
+        /usr/sbin/tripwire /usr/bin/tripwire \
+        /usr/bin/debconf-set-selections \
+        /usr/sbin/dpkg-reconfigure \
+        /usr/bin/clamscan \
+        /usr/bin/freshclam \
+        /usr/bin/osqueryi \
+        /bin/systemctl /usr/bin/systemctl \
+        /usr/sbin/aa-enforce /usr/bin/aa-enforce \
+        /usr/sbin/setenforce /usr/bin/setenforce \
+        /sbin/auditctl /usr/sbin/auditctl /usr/bin/auditctl \
+        /usr/bin/fail2ban-client \
+        /bin/cp /usr/bin/cp \
+        /bin/mv /usr/bin/mv \
+        /usr/bin/tee \
+        /usr/bin/sysctl /sbin/sysctl /usr/sbin/sysctl; do
+        if [[ -x "$scanner_path" ]]; then
+            [[ "$PKG_CMDS" == *"$scanner_path"* ]] && continue
+            PKG_CMDS="${PKG_CMDS}, ${scanner_path}"
+        fi
+    done
+
+    SUDOERS_FILE="/etc/sudoers.d/kjer"
+    cat > "$SUDOERS_FILE" << EOF
+# Kjer Security Framework - passwordless operation
+# Allows Kjer to install/remove security tools and run security scans without sudo prompts.
+# Created by kjer-install.sh — safe to delete if Kjer is uninstalled.
+${REAL_USER} ALL=(root) NOPASSWD: ${PKG_CMDS}
+EOF
+    chmod 440 "$SUDOERS_FILE"
+    chown root:root "$SUDOERS_FILE"
+
+    if visudo -c -f "$SUDOERS_FILE" &>/dev/null; then
+        ok "Passwordless operation configured for: $REAL_USER"
+    else
+        rm -f "$SUDOERS_FILE"
+        warn "Sudoers validation failed — passwordless operation not configured"
+        info "You can set it up manually after install via the Kjer GUI (Settings → Setup Sudo)."
+    fi
+}
+
 # ── Step 6: Summary ───────────────────────────────────────────────────────────
 show_summary() {
     echo
@@ -331,6 +403,8 @@ show_summary() {
     echo -e "     ${YELLOW}kjer${NC}             Interactive menu"
     echo -e "     ${YELLOW}kjer --status${NC}    Activation & system status"
     echo -e "     ${YELLOW}kjer --list${NC}      Browse available security tools"
+    echo -e "     ${YELLOW}kjer --scan${NC}      Run a security scan (installed tools)"
+    echo -e "     ${YELLOW}kjer --defend${NC}    Activate defensive hardening"
     echo -e "     ${YELLOW}kjer --gui${NC}       Re-open the GUI"
     echo -e "     ${YELLOW}kjer --help${NC}      Full command reference"
     echo
@@ -354,6 +428,7 @@ main() {
     check_python
     fix_lib_permissions
     setup_cli
+    setup_sudo_rules
 
     if $SKIP_GUI; then
         info "Skipping GUI/Electron install (--no-gui specified)."

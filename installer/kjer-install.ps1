@@ -216,6 +216,8 @@ Write-Host ""
 Write-Host "       kjer                Interactive menu" -ForegroundColor Yellow
 Write-Host "       kjer --status       Activation & system status" -ForegroundColor Yellow
 Write-Host "       kjer --list         Browse available security tools" -ForegroundColor Yellow
+Write-Host "       kjer --scan         Run a security scan (installed tools)" -ForegroundColor Yellow
+Write-Host "       kjer --defend       Activate defensive hardening" -ForegroundColor Yellow
 Write-Host "       kjer --gui          Re-open the GUI" -ForegroundColor Yellow
 Write-Host "       kjer --help         Full command reference" -ForegroundColor Yellow
 Write-Host ""

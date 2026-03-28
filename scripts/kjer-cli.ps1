@@ -821,28 +821,32 @@ function Show-MainMenu {
         Write-Host "  7) About Kjer"                                      -ForegroundColor Cyan
         Write-Host "  8) Uninitialize Kjer"                               -ForegroundColor Red
         Write-Host "  9) Upgrade Kjer (Enter License Key)"                -ForegroundColor Cyan
+        Write-Host "  10) Security Scan"                                  -ForegroundColor Cyan
+        Write-Host "  11) Smart Defense"                                  -ForegroundColor Cyan
         Write-Host "  0) Exit"                                            -ForegroundColor Red
         Write-Host ("="*70) -ForegroundColor Yellow
 
         $choice = Read-Host "`nYour choice"
 
         switch ($choice) {
-            '1' { Show-ListTools $db }
-            '2' { Show-InstallTool $db }
-            '3' { Show-InstallToolAdvanced $db }
-            '4' { Show-UninstallTool }
-            '5' { Show-Status }
-            '6' { Show-PackageManagement }
-            '7' { Show-About }
-            '8' { Invoke-UnInitializeKjer }
-            '9' { Invoke-UpgradeKjer }
+            '1'  { Show-ListTools $db }
+            '2'  { Show-InstallTool $db }
+            '3'  { Show-InstallToolAdvanced $db }
+            '4'  { Show-UninstallTool }
+            '5'  { Show-Status }
+            '6'  { Show-PackageManagement }
+            '7'  { Show-About }
+            '8'  { Invoke-UnInitializeKjer }
+            '9'  { Invoke-UpgradeKjer }
+            '10' { Invoke-CliScan }
+            '11' { Invoke-CliDefend }
             '0' {
                 Write-Host "`n  + Exiting Kjer CLI. Goodbye!" -ForegroundColor Green
                 Write-Host ""
                 exit 0
             }
             default {
-                Write-Host "`n  x Invalid option. Please select 0-9." -ForegroundColor Red
+                Write-Host "`n  x Invalid option. Please select 0-11." -ForegroundColor Red
             }
         }
 
@@ -927,6 +931,222 @@ function Launch-GUI {
     exit 1
 }
 
+# ==================== SECURITY SCAN ====================
+
+# (binary_name, display_name, phase, arguments_array, timeout_seconds)
+$KjerScanTools = @(
+    # Network Analysis
+    @{ bin='suricata';     name='Suricata (IDS/IPS)';          phase='NETWORK ANALYSIS';   args=@('suricata','-T');                                        to=10 },
+    @{ bin='tcpdump';      name='Tcpdump';                      phase='NETWORK ANALYSIS';   args=@('tcpdump','--version');                                  to=10 },
+    # Vulnerability Scan
+    @{ bin='openvas';      name='OpenVAS (vuln scanner)';       phase='VULNERABILITY SCAN'; args=@('openvas','--version');                                  to=10 },
+    # Malware & EDR
+    @{ bin='clamscan';     name='ClamAV (/home + /tmp)';        phase='MALWARE & EDR';      args=@('clamscan','-r','-i','--no-summary','C:\Users');         to=180 },
+    @{ bin='rkhunter';     name='RKHunter (rootkit)';           phase='MALWARE & EDR';      args=@('rkhunter','--check','--skip-keypress','--quiet');       to=90  },
+    @{ bin='chkrootkit';   name='Chkrootkit';                   phase='MALWARE & EDR';      args=@('chkrootkit','-q');                                      to=60  },
+    # File Integrity
+    @{ bin='aide';         name='AIDE (file integrity)';        phase='FILE INTEGRITY';     args=@('aide','--check');                                       to=120 },
+    @{ bin='tripwire';     name='Tripwire';                     phase='FILE INTEGRITY';     args=@('tripwire','--check');                                   to=60  },
+    # Compliance & Audit
+    @{ bin='lynis';        name='Lynis (system audit)';         phase='COMPLIANCE & AUDIT'; args=@('lynis','audit','system','--quick','--quiet');           to=120 },
+    @{ bin='osqueryi';     name='OsQuery';                      phase='COMPLIANCE & AUDIT'; args=@('osqueryi','--version');                                 to=10  }
+)
+
+function Invoke-CliScan {
+    Write-Host ""
+    Write-Host ("="*70) -ForegroundColor Cyan
+    Write-Host "  KJER SECURITY SCAN  --  multi-phase engine" -ForegroundColor Cyan
+    Write-Host ("="*70) -ForegroundColor Cyan
+    Write-Host ""
+
+    # Also check for Windows Defender (always available on Windows)
+    $mpcmdrun = Get-Command 'mpcmdrun.exe' -ErrorAction SilentlyContinue
+    if (-not $mpcmdrun) {
+        $mpcmdrun = Get-Command "$env:ProgramFiles\Windows Defender\MpCmdRun.exe" -ErrorAction SilentlyContinue
+    }
+    $defenderPath = if ($mpcmdrun) { $mpcmdrun.Source } else {
+        $p = "$env:ProgramFiles\Windows Defender\MpCmdRun.exe"
+        if (Test-Path $p) { $p } else { $null }
+    }
+
+    # Collect available cross-platform tools
+    $available = [System.Collections.Generic.List[hashtable]]::new()
+    foreach ($t in $KjerScanTools) {
+        if (Get-Command $t.bin -ErrorAction SilentlyContinue) {
+            $available.Add($t)
+        }
+    }
+
+    if ($available.Count -eq 0 -and -not $defenderPath) {
+        Write-Host "  No scan tools found in PATH." -ForegroundColor Red
+        Write-Host "  Install tools via: kjer -> Option 2 (Install Tools)"
+        Write-Host "  Recommended: lynis, rkhunter, clamav, aide, suricata"
+        return
+    }
+
+    $findings = 0
+
+    # Windows Defender quick scan (always first if available)
+    if ($defenderPath) {
+        Write-Host "-- WINDOWS BUILT-IN SECURITY " -ForegroundColor Magenta
+        Write-Host ""
+        Write-Host "  > Windows Defender" -ForegroundColor Yellow
+        try {
+            $proc = Start-Process -FilePath $defenderPath `
+                -ArgumentList @('-Scan', '-ScanType', '1') `
+                -Wait -PassThru -NoNewWindow -RedirectStandardOutput "$env:TEMP\kjer_defender.txt" `
+                -RedirectStandardError "$env:TEMP\kjer_defender_err.txt"
+            $out = if (Test-Path "$env:TEMP\kjer_defender.txt") { Get-Content "$env:TEMP\kjer_defender.txt" -Raw } else { '' }
+            Remove-Item "$env:TEMP\kjer_defender.txt","$env:TEMP\kjer_defender_err.txt" -Force -ErrorAction SilentlyContinue
+            $lines = ($out -split "`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 20
+            foreach ($line in $lines) {
+                $l = $line.Trim()
+                if ($l -match 'threat|infected|found|error|fail') {
+                    Write-Host "    [!] $l" -ForegroundColor Red; $findings++
+                } elseif ($l -match 'clean|complete|no threats|0 threats') {
+                    Write-Host "    [+] $l" -ForegroundColor Green
+                } else {
+                    Write-Host "        $l" -ForegroundColor Gray
+                }
+            }
+            if ($proc.ExitCode -notin @(0,$null)) {
+                Write-Host "    (exit $($proc.ExitCode))" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "    x $_" -ForegroundColor Red
+        }
+        Write-Host ""
+    }
+
+    # Cross-platform tools grouped by phase
+    $byPhase = @{}
+    foreach ($t in $available) {
+        if (-not $byPhase.ContainsKey($t.phase)) { $byPhase[$t.phase] = @() }
+        $byPhase[$t.phase] += $t
+    }
+
+    foreach ($phase in $byPhase.Keys) {
+        Write-Host "-- $phase " -ForegroundColor Magenta
+        foreach ($t in $byPhase[$phase]) {
+            Write-Host ""
+            Write-Host "  > $($t.name)" -ForegroundColor Yellow
+            try {
+                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                $psi.FileName               = $t.args[0]
+                $psi.Arguments              = ($t.args[1..($t.args.Count-1)]) -join ' '
+                $psi.RedirectStandardOutput = $true
+                $psi.RedirectStandardError  = $true
+                $psi.UseShellExecute        = $false
+
+                $proc = [System.Diagnostics.Process]::Start($psi)
+                $finished = $proc.WaitForExit($t.to * 1000)
+                if (-not $finished) { $proc.Kill(); Write-Host "    ! Timed out after $($t.to)s" -ForegroundColor Yellow }
+                $out  = $proc.StandardOutput.ReadToEnd()
+                $err2 = $proc.StandardError.ReadToEnd()
+                $lines = (($out + $err2) -split "`n") | Where-Object { $_.Trim() -ne '' } | Select-Object -First 20
+                $printed = 0
+                foreach ($line in $lines) {
+                    $l = $line.Trim()
+                    if ($l -match 'warning|found|infected|vulnerable|fail|\[x\]|\[!\]|error|critical') {
+                        Write-Host "    [!] $l" -ForegroundColor Red; $findings++
+                    } elseif ($l -match 'ok|not found|clean|passed|\[ok\]|no rootkit|0 infected') {
+                        Write-Host "    [+] $l" -ForegroundColor Green
+                    } elseif ($printed -lt 10) {
+                        Write-Host "        $l" -ForegroundColor Gray
+                    }
+                    $printed++
+                }
+                if ($proc.ExitCode -notin @(0,1,$null)) {
+                    Write-Host "    (exit $($proc.ExitCode))" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "    x $_" -ForegroundColor Red
+            }
+        }
+        Write-Host ""
+    }
+
+    Write-Host ("="*70) -ForegroundColor Cyan
+    if ($findings -eq 0) {
+        Write-Host "  + Scan complete -- no flagged findings." -ForegroundColor Green
+    } else {
+        Write-Host "  ! Scan complete -- $findings finding(s) flagged. Review output above." -ForegroundColor Red
+        Write-Host "  -> Run 'kjer --gui' then click DEFEND to apply automated fixes." -ForegroundColor Yellow
+    }
+    Write-Host "  For detailed reports and visualizations, use the GUI (Reports tab)." -ForegroundColor DarkGray
+    Write-Host ("="*70) -ForegroundColor Cyan
+    Write-Host ""
+}
+
+# ==================== SMART DEFENSE ====================
+
+# Defend tools: (backend_key, display_name, detect_binary)
+$KjerDefendTools = @(
+    @{ key='ufw';        name='Firewall (UFW)';                    bin='ufw'             },
+    @{ key='fail2ban';   name='Fail2Ban (brute-force protection)'; bin='fail2ban-client' },
+    @{ key='clamav';     name='ClamAV (AV scan + freshclam)';      bin='clamscan'        },
+    @{ key='rkhunter';   name='RKHunter (rootkit baseline)';       bin='rkhunter'        },
+    @{ key='chkrootkit'; name='Chkrootkit (cross-verification)';   bin='chkrootkit'      },
+    @{ key='apparmor';   name='AppArmor (MAC enforcement)';        bin='aa-status'       },
+    @{ key='selinux';    name='SELinux (MAC enforcement)';         bin='setenforce'      },
+    @{ key='auditd';     name='Linux Audit (auditd)';              bin='auditctl'        },
+    @{ key='suricata';   name='Suricata (IDS/IPS)';                bin='suricata'        },
+    @{ key='aide';       name='AIDE (file integrity)';             bin='aide'            },
+    @{ key='tripwire';   name='Tripwire (file integrity)';         bin='tripwire'        },
+    @{ key='lynis';      name='Lynis (compliance audit)';          bin='lynis'           },
+    @{ key='tiger';      name='Tiger (security audit)';            bin='tiger'           },
+    @{ key='gvm';        name='GVM/OpenVAS (vuln scanner svc)';    bin='gvmd'            },
+    @{ key='nessus';     name='Nessus (vuln scanner svc)';         bin='nessusd'         }
+)
+
+function Invoke-CliDefend {
+    Write-Host ""
+    Write-Host ("="*70) -ForegroundColor Cyan
+    Write-Host "  KJER SMART DEFENSE  --  backend-powered hardening" -ForegroundColor Cyan
+    Write-Host ("="*70) -ForegroundColor Cyan
+    Write-Host ""
+
+    $available = $KjerDefendTools | Where-Object { Get-Command $_.bin -ErrorAction SilentlyContinue }
+
+    if (-not $available) {
+        Write-Host "  No defense tools found in PATH." -ForegroundColor Red
+        Write-Host "  Install tools via: kjer -> Option 2 (Install Tools)"
+        Write-Host "  Recommended: ufw, fail2ban, clamav, apparmor, auditd, suricata"
+        return
+    }
+
+    $count    = @($available).Count
+    $succeded = 0
+    Write-Host "  Activating hardening for $count tool(s)..."
+    Write-Host ""
+
+    foreach ($t in $available) {
+        Write-Host "  > $($t.name)" -ForegroundColor Yellow
+        $result = Invoke-BackendAPI 'defend-tool' @{ tool = $t.key }
+        if ($result.success) {
+            $summary = if ($result.summary) { $result.summary } elseif ($result.message) { $result.message } else { 'Hardening applied' }
+            $summary = $summary.ToString().Substring(0, [Math]::Min(120, $summary.ToString().Length))
+            Write-Host "    + $summary" -ForegroundColor Green
+            $succeded++
+        } else {
+            $err = if ($result.error) { $result.error } elseif ($result.message) { $result.message } else { 'failed' }
+            $err = $err.ToString().Substring(0, [Math]::Min(120, $err.ToString().Length))
+            if ($err -match 'No hardening procedure') {
+                Write-Host "    (no hardening procedure defined -- skipped)" -ForegroundColor DarkGray
+            } else {
+                Write-Host "    ! $err" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    Write-Host ""
+    Write-Host ("="*70) -ForegroundColor Cyan
+    Write-Host "  + Defense complete -- $succeded/$count tool(s) hardened." -ForegroundColor Green
+    Write-Host "  For full Smart Defense + reports, use: kjer --gui -> DEFEND" -ForegroundColor DarkGray
+    Write-Host ("="*70) -ForegroundColor Cyan
+    Write-Host ""
+}
+
 function Show-Help {
     Write-Host ""
     Write-Host "Usage:  kjer [OPTION]" -ForegroundColor Cyan
@@ -936,6 +1156,8 @@ function Show-Help {
     Write-Host "  " -NoNewline; Write-Host "--gui,     -g       " -NoNewline -ForegroundColor Green; Write-Host "Launch the Kjer GUI application"
     Write-Host "  " -NoNewline; Write-Host "--status,  -s       " -NoNewline -ForegroundColor Green; Write-Host "Show installation status"
     Write-Host "  " -NoNewline; Write-Host "--list,    -l       " -NoNewline -ForegroundColor Green; Write-Host "List available tools"
+    Write-Host "  " -NoNewline; Write-Host "--scan,    -S       " -NoNewline -ForegroundColor Green; Write-Host "Run a security scan using installed tools"
+    Write-Host "  " -NoNewline; Write-Host "--defend,  -D       " -NoNewline -ForegroundColor Green; Write-Host "Activate defensive measures using installed tools"
     Write-Host "  " -NoNewline; Write-Host "--upgrade,  -u      " -NoNewline -ForegroundColor Green; Write-Host "Upgrade Kjer with a new license key"
     Write-Host "  " -NoNewline; Write-Host "--uninstall         " -NoNewline -ForegroundColor Green; Write-Host "Remove Kjer CLI integration from this system"
     Write-Host "  " -NoNewline; Write-Host "--version,  -v      " -NoNewline -ForegroundColor Green; Write-Host "Show version information"
@@ -1014,6 +1236,18 @@ try {
             $db = Import-Yaml $DbPath
             Show-ListTools $db
             Write-Host ""
+            exit 0
+        }
+        { $_ -in '--scan', '-S' } {
+            Test-RequireReady | Out-Null
+            Write-Header
+            Invoke-CliScan
+            exit 0
+        }
+        { $_ -in '--defend', '-D' } {
+            Test-RequireReady | Out-Null
+            Write-Header
+            Invoke-CliDefend
             exit 0
         }
         { $_ -in '--upgrade', '-u' } {

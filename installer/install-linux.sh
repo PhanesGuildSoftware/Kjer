@@ -215,8 +215,10 @@ setup_sudo_rules() {
 
     # Collect paths to all installed package managers
     PKG_CMDS=""
-    for pm_path in /usr/bin/apt-get /usr/bin/apt /usr/bin/dpkg /usr/bin/dnf \
-                   /usr/bin/pacman /usr/bin/zypper; do
+    for pm_path in \
+        /usr/bin/env \
+        /usr/bin/apt-get /usr/bin/apt /usr/bin/dpkg \
+        /usr/bin/dnf /usr/bin/pacman /usr/bin/zypper; do
         if [[ -x "$pm_path" ]]; then
             [[ -n "$PKG_CMDS" ]] && PKG_CMDS="${PKG_CMDS}, "
             PKG_CMDS="${PKG_CMDS}${pm_path}"
@@ -228,10 +230,40 @@ setup_sudo_rules() {
         return
     fi
 
+    # Collect paths for security scanner binaries (mirrors backend_api.py cmd_setup_sudo)
+    for scanner_path in \
+        /usr/sbin/ufw /usr/bin/ufw \
+        /usr/sbin/chkrootkit /usr/bin/chkrootkit \
+        /usr/bin/rkhunter \
+        /usr/bin/lynis /usr/sbin/lynis \
+        /usr/bin/aide /usr/sbin/aide /usr/sbin/aideinit \
+        /usr/sbin/tiger /usr/bin/tiger \
+        /usr/sbin/tripwire /usr/bin/tripwire \
+        /usr/bin/debconf-set-selections \
+        /usr/sbin/dpkg-reconfigure \
+        /usr/bin/clamscan \
+        /usr/bin/freshclam \
+        /usr/bin/osqueryi \
+        /bin/systemctl /usr/bin/systemctl \
+        /usr/sbin/aa-enforce /usr/bin/aa-enforce \
+        /usr/sbin/setenforce /usr/bin/setenforce \
+        /sbin/auditctl /usr/sbin/auditctl /usr/bin/auditctl \
+        /usr/bin/fail2ban-client \
+        /bin/cp /usr/bin/cp \
+        /bin/mv /usr/bin/mv \
+        /usr/bin/tee \
+        /usr/bin/sysctl /sbin/sysctl /usr/sbin/sysctl; do
+        if [[ -x "$scanner_path" ]]; then
+            # Avoid duplicates
+            [[ "$PKG_CMDS" == *"$scanner_path"* ]] && continue
+            PKG_CMDS="${PKG_CMDS}, ${scanner_path}"
+        fi
+    done
+
     SUDOERS_FILE="/etc/sudoers.d/kjer"
     cat > "$SUDOERS_FILE" << EOF
-# Kjer Security Framework - passwordless package management
-# Allows Kjer to install/remove security tools without sudo prompts.
+# Kjer Security Framework - passwordless operation
+# Allows Kjer to install/remove security tools and run security scans without sudo prompts.
 # Created automatically by install-linux.sh — safe to delete if Kjer is removed.
 ${ACTUAL_USER} ALL=(root) NOPASSWD: ${PKG_CMDS}
 EOF
@@ -240,10 +272,10 @@ EOF
 
     # Validate with visudo -c
     if visudo -c -f "$SUDOERS_FILE" &>/dev/null; then
-        print_success "Passwordless package management configured for: $ACTUAL_USER"
+        print_success "Passwordless operation configured for: $ACTUAL_USER"
     else
         rm -f "$SUDOERS_FILE"
-        print_warning "Sudoers validation failed — passwordless install not configured"
+        print_warning "Sudoers validation failed — passwordless operation not configured"
         print_info "You can set it up manually:  echo \"$ACTUAL_USER ALL=(root) NOPASSWD: ${PKG_CMDS}\" | sudo tee /etc/sudoers.d/kjer && sudo chmod 440 /etc/sudoers.d/kjer"
     fi
 }

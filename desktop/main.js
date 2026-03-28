@@ -132,6 +132,39 @@ ipcMain.handle('execute-command', async (event, command, args = []) => {
   });
 });
 
+// IPC: synchronous seed-state — read all critical ~/.kjer/ files once at startup
+// so preload.js can populate localStorage before app.js runs.  This guarantees
+// the startup flow never hits the license gate after a fresh install or reset.
+ipcMain.on('get-seed-state', (event) => {
+  const kjDir     = path.join(os.homedir(), '.kjer');
+  const initFlag  = path.join(kjDir, 'initialized');
+  const stateFile = path.join(kjDir, 'install_state.json');
+  const licFile   = path.join(kjDir, 'license_key.json');
+  const verFile   = path.join(__dirname, '..', 'version.json');
+  const seed = {};
+  try {
+    const st = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    if (st.os)           seed.userOS      = st.os;
+    if (st.distro)       seed.userDistro  = st.distro;
+    if (st.installed_at) seed.installedAt = st.installed_at;
+  } catch (_) {}
+  if (fs.existsSync(initFlag)) {
+    seed.kjerInitialized = 'true';
+    seed.kjerActivated   = 'true';
+  }
+  try {
+    const lic = JSON.parse(fs.readFileSync(licFile, 'utf8'));
+    if (lic.key)  seed.kjerLicenseKey  = lic.key;
+    if (lic.type) seed.kjerLicenseType = lic.type;
+    if (lic.key)  seed.kjerActivated   = 'true';
+  } catch (_) {}
+  try {
+    const ver = JSON.parse(fs.readFileSync(verFile, 'utf8'));
+    if (ver.version) seed.kjerVersion = ver.version;
+  } catch (_) {}
+  event.returnValue = seed;
+});
+
 // IPC: return the Kjer root directory (parent of desktop/)
 ipcMain.handle('get-app-path', async () => {
   return path.join(__dirname, '..');
@@ -215,6 +248,20 @@ ipcMain.handle('get-disk-info', async () => {
       }
     });
   });
+});
+
+// IPC: read ~/.kjer/license_key.json directly (no subprocess needed)
+// Returns { success, key, type, version } or { success: false }
+ipcMain.handle('read-license-key', async () => {
+  try {
+    const keyFile = path.join(os.homedir(), '.kjer', 'license_key.json');
+    const raw = fs.readFileSync(keyFile, 'utf8');
+    const data = JSON.parse(raw);
+    if (data && data.key) return { success: true, ...data };
+    return { success: false };
+  } catch (e) {
+    return { success: false };
+  }
 });
 
 // IPC: write (or update) ~/.kjer/install_state.json  (used by Windows installer path)

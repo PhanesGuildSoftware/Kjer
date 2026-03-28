@@ -1893,6 +1893,30 @@ body.dark-mode .page-header {
     color: #B0E0E6;
 }
 
+/* ── Light-mode update button: opaque so it's legible on the pale sidebar ── */
+#sidebarUpdateBtn {
+    background: rgba(157, 78, 221, 0.12) !important;
+    border: 1px solid rgba(157, 78, 221, 0.55) !important;
+    color: #7b2fbe !important;
+}
+#sidebarUpdateBtn:hover {
+    background: rgba(157, 78, 221, 0.22) !important;
+    border-color: rgba(157, 78, 221, 0.80) !important;
+    color: #5e1d99 !important;
+}
+
+body.dark-mode #sidebarUpdateBtn {
+    background: rgba(176, 224, 230, 0.08) !important;
+    border: 1px solid rgba(176, 224, 230, 0.25) !important;
+    color: #B0E0E6 !important;
+}
+body.dark-mode #sidebarUpdateBtn:hover {
+    background: rgba(176, 224, 230, 0.18) !important;
+    border-color: rgba(176, 224, 230, 0.55) !important;
+    color: #d0f0f8 !important;
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 body.dark-mode .sidebar {
     background: rgba(157, 78, 221, 0.30);
     border-right: 1px solid rgba(157, 78, 221, 0.45);

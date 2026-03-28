@@ -973,11 +973,18 @@ def show_status():
 	# ── License info ──────────────────────────────────────────────────────
 	lic = BackendAPI.get_license_info()
 	print(f"\n\033[1;32mLicense:\033[0m")
+	_TIER_INFO = {
+		'personal':   ('Personal',   'Assisted'),
+		'home':       ('Home',       'Semi-Auto'),
+		'enterprise': ('Enterprise', 'Fully Automated'),
+		'industrial': ('Industrial', 'Autonomous'),
+	}
 	if lic.get('activated'):
 		ltype = (lic.get('license_type') or lic.get('type') or 'personal').lower()
-		tier_label = 'Enterprise' if ltype == 'enterprise' else 'Personal'
+		tier_label, auto_label = _TIER_INFO.get(ltype, ('Personal', 'Assisted'))
 		print(f"  Status:         \033[1;32mActive\033[0m")
 		print(f"  License tier:   {tier_label}")
+		print(f"  Automation:     {auto_label}")
 		print(f"  Expires:        {lic.get('expires_at', 'Unknown')}  ({lic.get('days_remaining', '?')} days remaining)")
 		if lic.get('warning'):
 			print(f"  \033[1;33m⚠ {lic['warning']}\033[0m")
@@ -1135,7 +1142,7 @@ def upgrade_kjer():
 	print("="*70 + "\033[0m")
 	print()
 	print("  Enter your license key to activate, change tier, or renew.")
-	print("  Available tiers: Personal | Enterprise")
+	print("  Tiers: Personal (Assisted)  |  Home (Semi-Auto)  |  Enterprise (Fully Automated)  |  Industrial (Autonomous)")
 	print("  Keys are in the format: KJER-XX-XXXX-XXXX-XXXX")
 	print()
 
@@ -1188,9 +1195,16 @@ def upgrade_kjer():
 	# Cache the key so the user never has to retype it
 	_save_license_key_cache(raw, result)
 
+	_ACTIVATE_TIER_INFO = {
+		'personal':   ('Personal',   'Assisted'),
+		'home':       ('Home',       'Semi-Auto'),
+		'enterprise': ('Enterprise', 'Fully Automated'),
+		'industrial': ('Industrial', 'Autonomous'),
+	}
 	ltype = (result.get('license_type') or result.get('type') or 'personal').lower()
-	tier_label = 'Enterprise' if ltype == 'enterprise' else 'Personal'
+	tier_label, auto_label = _ACTIVATE_TIER_INFO.get(ltype, ('Personal', 'Assisted'))
 	print(f"\n\033[1;32m✓ {tier_label} License activated successfully!\033[0m")
+	print(f"  Automation level: {auto_label}")
 	if result.get('expires_at'):
 		print(f"  Expires: {result['expires_at']}")
 	if result.get('message'):

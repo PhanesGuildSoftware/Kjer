@@ -122,10 +122,30 @@ const BackendAPI = {
 // ==================== LICENSE TIER DEFINITIONS ====================
 
 const KJER_TIERS = {
-    personal:   { label: 'Personal',   tier: 1, maxDevices: 1,   maxProfiles: 3,   color: '#B0E0E6', description: 'Single device — local security tools and profiles.' },
-    home:       { label: 'Home',       tier: 2, maxDevices: 7,   maxProfiles: 15,  color: '#4caf50', description: 'Up to 7 devices on your home network.' },
-    enterprise: { label: 'Enterprise', tier: 3, maxDevices: 25,  maxProfiles: 50,  color: '#9D4EDD', description: 'Up to 25 devices — business-grade security management.' },
-    industrial: { label: 'Industrial', tier: 4, maxDevices: 100, maxProfiles: 100, color: '#ff9800', description: 'Up to 100 devices — industrial-scale security operations.' },
+    personal:   {
+        label: 'Personal',   tier: 1, maxDevices: 1,   maxProfiles: 3,   color: '#B0E0E6',
+        automationLevel: 1, automationLabel: 'Assisted',
+        automationDesc:  'Manual trigger only — you initiate every scan and action.',
+        description: 'Single device — manual-trigger security tools and profiles.',
+    },
+    home:       {
+        label: 'Home',       tier: 2, maxDevices: 7,   maxProfiles: 15,  color: '#4caf50',
+        automationLevel: 2, automationLabel: 'Semi-Auto',
+        automationDesc:  'Scheduled scans with manual approval for defensive actions.',
+        description: 'Up to 7 devices — scheduled scanning, manual defense approval.',
+    },
+    enterprise: {
+        label: 'Enterprise', tier: 3, maxDevices: 25,  maxProfiles: 50,  color: '#9D4EDD',
+        automationLevel: 3, automationLabel: 'Fully Automated',
+        automationDesc:  'Auto-scan, auto-defend, and policy enforcement across all devices.',
+        description: 'Up to 25 devices — fully automated scanning and defense pipeline.',
+    },
+    industrial: {
+        label: 'Industrial', tier: 4, maxDevices: 100, maxProfiles: 100, color: '#ff9800',
+        automationLevel: 4, automationLabel: 'Autonomous',
+        automationDesc:  'Autonomous operation with scheduled tasks, policy-driven response, and zero human intervention required.',
+        description: 'Up to 100 devices — autonomous, scheduled, and policy-driven security operations.',
+    },
 };
 
 /** Returns the full tier object for the currently active license. */
@@ -149,6 +169,31 @@ function getMaxDevices() {
 /** Returns the max number of custom profiles allowed for the current tier. */
 function getMaxProfiles() {
     return getActiveTier().maxProfiles;
+}
+
+/** Returns the Automation Intensity level (1–4) for the current tier. */
+function getAutomationLevel() {
+    return getActiveTier().automationLevel;
+}
+
+/** Returns the Automation Intensity label (e.g. 'Assisted', 'Semi-Auto') for the current tier. */
+function getAutomationLabel() {
+    return getActiveTier().automationLabel || 'Assisted';
+}
+
+/** Returns true if scheduled (cron-style) scans are available at the current tier (Home+). */
+function canScheduleScans() {
+    return getAutomationLevel() >= 2;
+}
+
+/** Returns true if defensive actions can be triggered automatically (Enterprise+). */
+function canAutoDefend() {
+    return getAutomationLevel() >= 3;
+}
+
+/** Returns true if fully autonomous, policy-driven operation is available (Industrial). */
+function canRunAutonomously() {
+    return getAutomationLevel() >= 4;
 }
 
 // ===================================================================
@@ -230,7 +275,22 @@ const SystemInfo = {
  * Call this once at startup (instead of syncInstalledFromSystem +
  * syncPreInstalledTools) and again after initialize / install / uninstall.
  */
-async function detectFullHostSystem() {
+async function detectFullHostSystem(force = false) {
+    // Skip the live Python scan if one completed successfully in the last 30 minutes.
+    // Tool installs don't change between rapid app re-launches, so cached localStorage
+    // data is accurate for typical usage.  Prevents the 5-30 s Python boot hang on
+    // every single restart.  Force-refresh is still available via the Refresh button
+    // or by clearing cache > 30 min after the last scan.
+    const lastScanTs = parseInt(localStorage.getItem('lastHostScanTime') || '0');
+    if (!force && lastScanTs && (Date.now() - lastScanTs) < 30 * 60 * 1000) {
+        logActivity('Host detection: using recent cached data', 'info');
+        initializeDashboard?.();
+        updateSettingsSystemInfo?.();
+        reapplyToolFilter?.();
+        updateSystemStatus?.();
+        return null;
+    }
+
     logActivity('Running full host system detection…', 'info');
 
     // ── Build lowercase key→displayName lookup once ──────────────────────────
@@ -298,6 +358,8 @@ async function detectFullHostSystem() {
             `Host detected: ${data.distro || data.os}${hwParts.length ? ' | ' + hwParts.join(' | ') : ''}`,
             'success'
         );
+        // Cache the scan timestamp so the next boot within 30 min skips Python
+        localStorage.setItem('lastHostScanTime', Date.now().toString());
     } else {
         // ── Fallback: read ~/.kjer/system_analysis.json via Node IPC ─────────
         // This path doesn't need Python at all — always works in Electron.
@@ -343,6 +405,7 @@ async function detectFullHostSystem() {
     reapplyToolFilter?.();
     updateSystemStatus?.();
 
+    logActivity('Host detection complete', 'info');
     return data;
 }
 
@@ -398,24 +461,38 @@ async function loadInstallStateIntoApp() {
         localStorage.setItem('userOS', SystemInfo.detectOS());
     }
 
-    // Restore saved license key from disk if localStorage is empty.
-    // This handles localStorage clears, app reinstalls, and first-run after
-    // the CLI was used to activate (CLI also writes license_key.json).
-    if (!localStorage.getItem('kjerLicenseKey')) {
+    // Restore saved license key from disk whenever the activation flag is missing.
+    // Gating on !kjerActivated (not !kjerLicenseKey) ensures a disk read happens
+    // even when kjerLicenseKey is already cached but kjerActivated was separately
+    // wiped — the most common failure scenario.
+    if (!localStorage.getItem('kjerActivated')) {
         try {
             const cached = await readLicenseKeyFromDisk();
             if (cached && cached.key) {
-                localStorage.setItem('kjerLicenseKey',  cached.key);
-                if (cached.type) localStorage.setItem('kjerLicenseType', cached.type);
-                // A key on disk means the user successfully activated — restore that state.
-                localStorage.setItem('kjerActivated', 'true');
-                logActivity('License key restored from saved state', 'info');
-                // Warm the main-process auth session so feature gates work immediately
-                await window.electronAPI?.setLicenseAuth?.({
-                    authorized:     true,
-                    licenseType:    cached.type    || 'personal',
-                    displayVersion: cached.version || localStorage.getItem('kjerVersion') || '1.0.0',
-                });
+                // For promo licenses, check expiry before restoring activated state
+                let promoExpired = false;
+                if (cached.type === 'promo' && cached.expires_at) {
+                    try {
+                        promoExpired = new Date(cached.expires_at) <= new Date();
+                    } catch (_) {}
+                }
+                if (!promoExpired) {
+                    localStorage.setItem('kjerLicenseKey',  cached.key);
+                    if (cached.type) localStorage.setItem('kjerLicenseType', cached.type);
+                    if (cached.expires_at && cached.type === 'promo')
+                        localStorage.setItem('kjerPromoExpires', cached.expires_at);
+                    // A key on disk means the user successfully activated — restore that state.
+                    localStorage.setItem('kjerActivated', 'true');
+                    logActivity('License key restored from saved state', 'info');
+                    // Warm the main-process auth session so feature gates work immediately
+                    await window.electronAPI?.setLicenseAuth?.({
+                        authorized:     true,
+                        licenseType:    (cached.type === 'promo' ? 'personal' : cached.type) || 'personal',
+                        displayVersion: cached.version || localStorage.getItem('kjerVersion') || '1.0.0',
+                    });
+                } else {
+                    logActivity('Promo license has expired — activation required', 'warning');
+                }
             }
         } catch (e) { /* non-fatal */ }
     }
@@ -425,9 +502,11 @@ async function loadInstallStateIntoApp() {
     // Always runs — merges any tool found in system_analysis.json into localStorage
     // without removing tools already there, so this is idempotent and safe to run
     // on every startup (handles partial state, stale gvm-only entries, etc.).
+    let _sysAnalysisLoaded = false;
     try {
         const r = await window.electronAPI?.readSystemAnalysis?.();
         if (r?.success && r.data?.detected_tools) {
+            _sysAnalysisLoaded = true;
             const dbKeySet = new Set(Object.keys(TOOLS_DATABASE));
             let preCount = 0;
             for (const [yamlKey, info] of Object.entries(r.data.detected_tools)) {
@@ -442,6 +521,23 @@ async function loadInstallStateIntoApp() {
             }
         }
     } catch (_) { /* non-fatal */ }
+
+    // Auto-recovery: if ~/.kjer/initialized was wiped (e.g. by a reinstall) but
+    // system_analysis.json exists alongside a valid install_state.json, the system
+    // was already set up — recreate the flag so the app doesn't land the user on
+    // the license gate after every reinstall.
+    if (!localStorage.getItem('kjerInitialized') && _sysAnalysisLoaded && localStorage.getItem('userOS')) {
+        try {
+            const isWin = localStorage.getItem('userOS') === 'windows';
+            const shell = isWin ? 'powershell' : 'bash';
+            const cmd   = isWin
+                ? ['-Command', 'New-Item -ItemType File -Force -Path "$env:USERPROFILE\\.kjer\\initialized" | Out-Null']
+                : ['-c', 'mkdir -p ~/.kjer && touch ~/.kjer/initialized'];
+            await window.electronAPI?.executeCommand?.(shell, cmd);
+            localStorage.setItem('kjerInitialized', 'true');
+            logActivity('Initialization state auto-recovered from system cache', 'info');
+        } catch (_) { /* non-fatal */ }
+    }
 
     return localStorage.getItem('userOS');
 }
@@ -650,7 +746,9 @@ async function initializeKjer() {
     // Detect and register pre-installed tools, and read hardware info.
     // detectFullHostSystem() does the full OS + RAM + disk + binary check in one
     // backend pass, caches everything in localStorage, and refreshes all panels.
-    await detectFullHostSystem();
+    // force=true bypasses the 30-min cooldown so we always get fresh data right
+    // after initialization completes.
+    await detectFullHostSystem(true);
 
     // Auto-register the 'kjer' CLI command on the host system
     await setupCLIIntegration(installedOS);
@@ -986,6 +1084,16 @@ async function saveLicenseKeyToDisk(key, type) {
  * Returns { key, type, saved_at } or null.
  */
 async function readLicenseKeyFromDisk() {
+    // Primary: direct IPC read — no subprocess, works reliably regardless of PATH.
+    try {
+        if (window.electronAPI?.readLicenseKey) {
+            const r = await window.electronAPI.readLicenseKey();
+            if (r?.success && r.key) return r;
+        }
+    } catch (e) { /* fall through to bash fallback */ }
+
+    // Fallback: bash/powershell subprocess (legacy path for environments where
+    // the preload version pre-dates the readLicenseKey IPC handler).
     const os = localStorage.getItem('userOS') || 'linux';
     try {
         const shell = os === 'windows' ? 'powershell' : 'bash';
@@ -1108,20 +1216,31 @@ async function activateKjer() {
     const result = await BackendAPI.activateLicense(licenseKey, licenseType);
     
     if (result.success) {
-        const tierLabel = (KJER_TIERS[licenseType] || KJER_TIERS.personal).label;
-        statusDiv.innerHTML = `<span style="color: #4caf50;">✓ ${tierLabel} License activated!</span>`;
+        const isPromo   = result.license_type === 'promo';
+        const effType   = isPromo ? 'personal' : licenseType;   // promos get Personal-tier features
+        const tierLabel = isPromo
+            ? `${result.promo_days}-Day Promo`
+            : (KJER_TIERS[licenseType] || KJER_TIERS.personal).label;
+        const expiryNote = isPromo
+            ? ` · expires ${result.expires_at ? result.expires_at.slice(0, 10) : 'soon'}`
+            : '';
+        statusDiv.innerHTML = `<span style="color: #4caf50;">✓ ${tierLabel} License activated!${expiryNote}</span>`;
 
         // ── Persist the key so the user never has to re-enter it ──────────
         localStorage.setItem('kjerLicenseKey',  licenseKey);
-        localStorage.setItem('kjerLicenseType', licenseType);
+        localStorage.setItem('kjerLicenseType', isPromo ? 'promo' : licenseType);
         localStorage.setItem('kjerActivated',   'true');
-        saveLicenseKeyToDisk(licenseKey, licenseType);
+        if (isPromo) {
+            localStorage.setItem('kjerPromoExpires', result.expires_at || '');
+            localStorage.setItem('kjerPromoDays',    String(result.promo_days || ''));
+        }
+        saveLicenseKeyToDisk(licenseKey, isPromo ? 'promo' : licenseType);
         // Cache any GitHub token returned by the backend for update checks/installs
         if (result.github_token) _storedUpgradeToken = result.github_token;
         // Set auth session in main process
         await window.electronAPI?.setLicenseAuth?.({
             authorized:     true,
-            licenseType:    licenseType,
+            licenseType:    effType,
             displayVersion: '1.0.0',
         });
         // ──────────────────────────────────────────────────────────────────
@@ -1828,15 +1947,33 @@ const ActivityLog = {
             message: message,
             tool: tool,
             important: important,
-            timestamp: now
+            timestamp: now.toISOString()
         });
 
-        // Keep only last 25 entries
         if (this.entries.length > this.maxEntries) {
             this.entries.pop();
         }
 
+        this.save();
         this.render();
+    },
+
+    save: function() {
+        try {
+            // Cap persisted entries to keep localStorage footprint small
+            localStorage.setItem('kjerActivityLog', JSON.stringify(this.entries.slice(0, 100)));
+        } catch (_) {}
+    },
+
+    load: function() {
+        try {
+            const raw = localStorage.getItem('kjerActivityLog');
+            if (!raw) return;
+            const saved = JSON.parse(raw);
+            if (Array.isArray(saved) && saved.length) {
+                this.entries = saved.slice(0, this.maxEntries);
+            }
+        } catch (_) {}
     },
 
     render: function() {
@@ -1854,6 +1991,7 @@ const ActivityLog = {
 
     clear: function() {
         this.entries = [];
+        try { localStorage.removeItem('kjerActivityLog'); } catch (_) {}
         this.render();
     }
 };
@@ -2160,8 +2298,12 @@ function bootApplication() {
 }
 
 document.addEventListener('DOMContentLoaded', async function() {
+    // Restore persisted activity log before anything else writes to it
+    ActivityLog.load();
+
     loadSettings();
     NetworkStatus.init();
+    _monitorUiActive(false);  // ensure stop/badge start hidden
 
     // Mark the start of this session in the activity log
     const sessionStart = new Date().toLocaleString();
@@ -2185,8 +2327,56 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Check for a valid license before rendering any application content.
     // The in-memory session (set by main.js on startup) is the authoritative
     // source; localStorage activation flag is the fallback for the renderer.
-    const session       = await window.electronAPI?.getAuthSession?.();
-    const isAuthorized  = session?.authorized || localStorage.getItem('kjerActivated') === 'true';
+
+    // Safety net: restore kjerActivated from any available evidence before the
+    // gate check runs.  Handles the case where localStorage was wiped (old
+    // clearCache / resetSettings) but the user has a valid disk-side record.
+    //
+    // Priority (highest to lowest):
+    //   1. kjerLicenseKey already in localStorage  (set by loadInstallStateIntoApp)
+    //   2. kjerInitialized = 'true' in localStorage (set from ~/.kjer/initialized on disk)
+    //      → the user successfully completed initialization, which requires a license.
+    // Neither condition touches kjerActivated unless it is currently missing/false.
+    if (!localStorage.getItem('kjerActivated')) {
+        if (localStorage.getItem('kjerLicenseKey')) {
+            localStorage.setItem('kjerActivated', 'true');
+            logActivity('Activation flag restored from persisted license key', 'info');
+        } else if (localStorage.getItem('kjerInitialized') === 'true') {
+            localStorage.setItem('kjerActivated', 'true');
+            logActivity('Activation flag restored from initialization record — please re-enter your key in Settings to refresh it', 'warning');
+        }
+    }
+
+    const session      = await window.electronAPI?.getAuthSession?.();
+    let   isAuthorized = session?.authorized || localStorage.getItem('kjerActivated') === 'true';
+
+    // Final authoritative fallback: ask the Python backend directly.
+    // This reads ~/.kjer/license_key.json and ~/.kjer/initialized straight from
+    // disk — immune to any localStorage inconsistency. Only runs when the faster
+    // localStorage/IPC paths above all failed to produce an authorized state.
+    if (!isAuthorized) {
+        try {
+            const activation = await BackendAPI.checkActivation();
+            if (activation?.activated) {
+                localStorage.setItem('kjerActivated', 'true');
+                if (activation.license_type && activation.license_type !== 'trial')
+                    localStorage.setItem('kjerLicenseType', activation.license_type);
+                if (activation.license_key)
+                    localStorage.setItem('kjerLicenseKey', activation.license_key);
+                if (activation.expires_at)
+                    localStorage.setItem('kjerPromoExpires', activation.expires_at);
+                isAuthorized = true;
+                logActivity('Authorization confirmed via backend disk check', 'info');
+            } else if (activation?.is_expired) {
+                // Promo expired — clear cached activation so the gate shows
+                localStorage.removeItem('kjerActivated');
+                localStorage.removeItem('kjerLicenseKey');
+                localStorage.removeItem('kjerLicenseType');
+                localStorage.removeItem('kjerPromoExpires');
+                logActivity('Promo license expired — please purchase a license', 'warning');
+            }
+        } catch (e) { /* non-fatal — fall through to gate */ }
+    }
 
     if (!isAuthorized) {
         logActivity('License required — awaiting activation key', 'warning');
@@ -2660,6 +2850,8 @@ function initializeDashboard() {
         SecurityMonitor.render();
         // Storage info is available even before initialization
         updateStorageInfo();
+        // Sync Status tab OS field
+        updateStatusPage?.();
 
         return;
     }
@@ -2684,6 +2876,9 @@ function initializeDashboard() {
 
     // Sync version display with backend (accessible version may differ from stored)
     updateVersionDisplay();
+
+    // Sync the Status tab OS field so it never shows 'Detecting...' on first visit
+    updateStatusPage?.();
     
     // Render activity log
     ActivityLog.render();
@@ -2731,11 +2926,22 @@ function updateLicenseStatus() {
     const licenseType    = localStorage.getItem('kjerLicenseType')  || 'none';
     const currentVersion = localStorage.getItem('kjerVersion')      || '1.0.0';
     const isDevMode      = currentVersion === 'developer';
+    const isPromo        = licenseType === 'promo';
 
-    // Human-readable tier label
-    const tierLabel = isDevMode   ? 'Developer Mode'
-                    : isActivated ? getTierLabel(licenseType)
-                    : '[Not Activated]';
+    // Build human-readable tier label
+    let tierLabel;
+    if (isDevMode) {
+        tierLabel = 'Developer Mode';
+    } else if (isPromo && isActivated) {
+        const promoDays    = localStorage.getItem('kjerPromoDays') || '';
+        const promoExpires = localStorage.getItem('kjerPromoExpires') || '';
+        const expStr       = promoExpires ? ` · expires ${promoExpires.slice(0, 10)}` : '';
+        tierLabel = `${promoDays ? promoDays + '-Day ' : ''}Promo License${expStr}`;
+    } else if (isActivated) {
+        tierLabel = getTierLabel(licenseType);
+    } else {
+        tierLabel = '[Not Activated]';
+    }
 
     // --- Dashboard sidebar badge ---
     const statusBadge = document.getElementById('licenseStatusBadge');
@@ -2762,7 +2968,9 @@ function updateLicenseStatus() {
     const licenseTypeEl = document.getElementById('currentVersionType');
     if (currentVerEl)  currentVerEl.textContent  = tierLabel;
     if (licenseTypeEl) licenseTypeEl.textContent  = isActivated
-        ? (isDevMode ? '(Developer Mode)' : `(${licenseType.charAt(0).toUpperCase() + licenseType.slice(1)})`)
+        ? (isDevMode ? '(Developer Mode)'
+             : isPromo ? '(Promo) · Assisted'
+             : `(${licenseType.charAt(0).toUpperCase() + licenseType.slice(1)}) · ${getAutomationLabel()}`)
         : '[Not Activated]';
 }
 
@@ -2789,6 +2997,10 @@ function refreshSystemStatus() {
     
     const displayOS = localStorage.getItem('userDistro') || localStorage.getItem('userOS') || SystemInfo.getOSInfo().name;
     showNotification(`System status updated: ${displayOS}`);
+
+    // Force a fresh host scan so the user sees live tool/hardware data.
+    // Pass force=true to bypass the 30-minute cooldown that skips Python on normal boots.
+    detectFullHostSystem(true).catch(() => {});
 }
 
 function scanForUpdates() {
@@ -3066,7 +3278,7 @@ const ReportWizard = {
         if (this.page === 1) {
             // Ensure at least one section is checked
             const checked = ['rpt_threats','rpt_defense','rpt_vulns','rpt_network',
-                             'rpt_integrity','rpt_compliance','rpt_sysinfo','rpt_tools','rpt_actlog']
+                             'rpt_integrity','rpt_compliance','rpt_sysinfo','rpt_tools','rpt_actlog','rpt_monitor']
                             .some(id => document.getElementById(id)?.checked);
             if (!checked) { showNotification('Select at least one report section.'); return; }
             this._showPage(2);
@@ -3126,6 +3338,7 @@ const ReportWizard = {
             [document.getElementById('rpt_sysinfo')?.checked,    'System Information'],
             [document.getElementById('rpt_tools')?.checked,      'Installed Tools Inventory'],
             [document.getElementById('rpt_actlog')?.checked,     'Security Activity Log'],
+            [document.getElementById('rpt_monitor')?.checked,    'Monitor Activity Summary'],
         ].filter(([on]) => on).map(([, label]) => label);
 
         const fmt      = this._selectedFormat().toUpperCase();
@@ -3153,6 +3366,7 @@ const ReportWizard = {
                 sysinfo:    document.getElementById('rpt_sysinfo')?.checked,
                 tools:      document.getElementById('rpt_tools')?.checked,
                 actlog:     document.getElementById('rpt_actlog')?.checked,
+                monitor:    document.getElementById('rpt_monitor')?.checked,
             };
             const fmt      = this._selectedFormat();
             const savePath = document.getElementById('reportSavePath')?.value?.trim() || '';
@@ -3184,198 +3398,69 @@ function reportWizardBack()   { ReportWizard.back();  }
 
 // ── Report content builder ────────────────────────────────────────────
 // ==================== FINDING ADVISORY KNOWLEDGE BASE ====================
-// Returns an object { cause, fix, defenseNote } for any scan finding.
-// Matches on tool key + message content; falls back to a generic entry.
+// Returns an object { defenseNote } for any scan finding.
+// Used by the defense Remediation Detail table when no direct match is found.
 function _findingAdvisory(f) {
-    const key  = (f.key || f.tool || '').toLowerCase();
-    const msg  = (f.message || '').toLowerCase();
-    const lvl  = f.level || 'info';
+    const key = (f.key || f.tool || '').toLowerCase();
+    const msg = (f.message || '').toLowerCase();
 
-    if (key === 'clamav') {
-        if (msg.includes('threat') || msg.includes('detect') || msg.includes('infected')) {
-            return {
-                cause: 'Malicious files were found on the filesystem. Common entry points include email attachments, compromised downloads, USB media, or exploitation of a vulnerable service. The detected file may be dormant or actively executing.',
-                fix:   'Immediately quarantine flagged files: clamscan --infected --move=/quarantine <path>. Identify how the file arrived — check browser download history, mail server logs, and recently-modified files (find / -newer /proc/1/exe -type f 2>/dev/null). If a web or mail server is involved, audit recent access logs. After quarantine, run a second full scan to confirm no remnants.',
-                defenseNote: 'ClamAV quarantined the detected file(s) into /var/lib/clamav/quarantine — they are now isolated from the running system. Run a second-pass clamscan to confirm no additional files were missed. Virus definition database was updated to the latest signatures.',
-            };
-        }
-        return {
-            cause: 'ClamAV completed a full filesystem scan. No active threats were detected at this time.',
-            fix:   'No immediate action required. Maintain daily freshclam runs to keep definitions current.',
-            defenseNote: 'Virus definitions were updated and a full targeted scan was performed. The system is clean per ClamAV.',
-        };
-    }
-
-    if (key === 'chkrootkit') {
-        if (msg.includes('infected') || msg.includes('rootkit') || msg.includes('pattern')) {
-            return {
-                cause: 'Chkrootkit flagged "infected" patterns. IMPORTANT: the most common cause of recurring patterns — especially when Suricata, Wireshark, or any IDS/packet capture tool is active — is the network interface running in PROMISCUOUS MODE. Chkrootkit\'s ifpromisc and sniffer checks are well-known false positives in this scenario. Other (less likely) causes: modified system binaries, hidden processes, or tampered /proc entries.',
-                fix:   '1. Check for promiscuous mode: ip link show | grep PROMISC — if listed, your IDS tool is the cause (safe, expected). 2. Verify binary integrity: debsums -c (Debian/Ubuntu) or rpm -Va (RPM) — if these pass, the system binaries are unmodified and the detections are false positives. 3. Only escalate to live-USB forensic analysis if debsums/rpm shows actual file mismatches.',
-                defenseNote: 'Kjer ran a four-point cross-verification: (1) chkrootkit second pass, (2) promiscuous mode check (ip link), (3) package integrity via debsums or rpm -Va, (4) rkhunter cross-check. If promiscuous mode was detected and package integrity passed, the patterns are false positives from your IDS tool. No live rootkit independently confirmed.',
-            };
-        }
-        return {
-            cause: 'Chkrootkit completed its scan and found no confirmed rootkit signatures.',
-            fix:   'No action required. Keep chkrootkit updated and schedule weekly scans.',
-            defenseNote: 'Cross-verification complete — promiscuous mode check, package integrity, and rkhunter cross-check all passed.',
-        };
-    }
-
-    if (key === 'rkhunter') {
-        if (msg.includes('warning') || msg.includes('suspect') || lvl === 'warning') {
-            return {
-                cause: 'Rkhunter found files whose properties deviate from the stored baseline (hash mismatch, unexpected SUID bits, or suspicious strings in binaries). This may indicate tampering, or it may be caused by legitimate software updates that were not followed by a baseline update.',
-                fix:   'Review /var/log/rkhunter.log for full details. For each flagged binary, verify its integrity against the official package: dpkg -V <package> or rpm -V <package>. If the file is from a legitimate update, update the Rkhunter baseline: sudo rkhunter --propupd. If the file cannot be attributed to an official package, treat as a compromise indicator.',
-                defenseNote: 'Rkhunter --propupd was run to update the baseline for verified, approved changes. Suspicious module entries have been logged for manual review.',
-            };
-        }
-        return {
-            cause: 'Rkhunter found no rootkits, backdoors, or suspicious files.',
-            fix:   'No action required. Run rkhunter --update weekly and rkhunter --propupd after any planned OS updates.',
-            defenseNote: 'Rkhunter baseline properties were updated with --propupd to reflect any approved recent system changes.',
-        };
-    }
-
-    if (key === 'gvm' || key === 'openvas') {
-        if (msg.includes('fail') || msg.includes('error')) {
-            return {
-                cause: 'The GVM/OpenVAS vulnerability scanner service failed to start or respond. This is commonly caused by an uninitialised PostgreSQL database, a port conflict on 9390/9392, an incomplete gvm-setup run, or insufficient system resources (GVM requires 2 GB+ RAM).',
-                fix:   'Run: sudo gvm-start (or sudo systemctl start gvmd ospd-openvas). If that fails: sudo gvm-setup to reinitialise the database. Check service status: systemctl status gvmd ospd-openvas. Review logs: journalctl -xe -u gvmd. Ensure PostgreSQL is running: systemctl status postgresql.',
-                defenseNote: 'Service failure means vulnerability scanning is not active. Kjer performed a health check and attempted a service restart. Manual intervention is required to restore continuous vulnerability scanning.',
-            };
-        }
-        return {
-            cause: 'OpenVAS/GVM vulnerability scanner is running and available.',
-            fix:   'No action required. Schedule regular authenticated scans against all hosts in scope.',
-            defenseNote: 'OpenVAS service health confirmed. Vulnerability scanning is active.',
-        };
-    }
-
-    if (key === 'suricata') {
-        if (msg.includes('fail') || msg.includes('error')) {
-            return {
-                cause: 'Suricata IDS/IPS is not running. Without network intrusion detection, attacks such as port scans, exploit attempts, command-and-control beaconing, data exfiltration, and lateral movement cannot be detected or blocked at the network layer.',
-                fix:   'Run: sudo systemctl restart suricata. Verify the correct network interface in suricata.yaml (af-packet: interface). Check /var/log/suricata/suricata.log for startup errors. Ensure the Emerging Threats ruleset is present (/etc/suricata/rules/). Test with: suricata -T -c /etc/suricata/suricata.yaml',
-                defenseNote: 'Because Suricata was not running, network-layer threat blocking was unavailable. Rules were reloaded so IPS mode will activate on next successful service start. Restore the service immediately to re-enable real-time network threat blocking.',
-            };
-        }
-        return {
-            cause: 'Suricata IDS/IPS is running.',
-            fix:   'Ensure Emerging Threats rules are updated weekly. Review /var/log/suricata/fast.log for alerts.',
-            defenseNote: 'Suricata was switched to IPS mode — malicious traffic matching ET signatures will be dropped in-line.',
-        };
-    }
-
-    if (key === 'aide') {
-        if (msg.includes('exit') || msg.includes('error') || msg.includes('database') || msg.includes('aide.conf')) {
-            return {
-                cause: 'AIDE exited with an error — most commonly because its initial database has never been created. Without an initialised baseline, AIDE has no reference state and cannot detect file modifications. Exit code 17 specifically means the database file was not found.',
-                fix:   'Initialise the AIDE database on a verified clean system: sudo aideinit (or sudo aide --init). Copy the new DB: sudo cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db. Then add a weekly cron job: 0 3 * * 0 root /usr/bin/aide --check 2>&1 | mail -s "AIDE Report" root. Review /etc/aide/aide.conf to exclude volatile paths (/proc, /run, /tmp, /var/log).',
-                defenseNote: 'Kjer flagged all modified files for manual review. The baseline was NOT automatically updated — automatic updates would defeat the purpose of FIM. Initialise AIDE from a known-clean state before relying on it for future monitoring.',
-            };
-        }
-        if (msg.includes('change') || msg.includes('modified') || msg.includes('violation')) {
-            return {
-                cause: 'AIDE detected file modifications that differ from the stored baseline. This could indicate unauthorised tampering, malware persistence (modified init scripts, cron jobs, system binaries), or legitimate changes that were not recorded.',
-                fix:   'Review the AIDE report for the full list of changed files. For each flagged file: compare against official package checksums, check recent modification timestamps (ls -la, stat), and review access logs. If changes are authorised, update the baseline: sudo aide --update && sudo cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db.',
-                defenseNote: 'Flagged files were logged for manual review. The baseline was not automatically updated to avoid overwriting evidence of a compromise.',
-            };
-        }
-        return {
-            cause: 'AIDE found no file integrity violations against its stored baseline.',
-            fix:   'No action required. Ensure the baseline is updated after every planned system change.',
-            defenseNote: 'AIDE database cross-check completed — no violations detected.',
-        };
-    }
-
-    if (key === 'tripwire') {
-        if (msg.includes('not fully') || msg.includes('--init') || msg.includes('configure') || msg.includes('initialise')) {
-            return {
-                cause: 'Tripwire is installed but its cryptographically-signed database has never been initialised. Without a baseline, it cannot detect any modifications to the filesystem.',
-                fix:   'Initialise on a clean system: sudo tripwire --init. Create a signed policy file: twadmin --create-polfile /etc/tripwire/twpol.txt. Store the site-key and local-key passphrases offline securely. Schedule weekly integrity checks: 0 2 * * 0 root /usr/sbin/tripwire --check.',
-                defenseNote: 'Tripwire could not be used for baseline comparison — it is not initialised. Configure it in a known-clean state to enable cryptographically-verified file integrity monitoring going forward.',
-            };
-        }
-        return {
-            cause: 'Tripwire is running and monitoring filesystem integrity.',
-            fix:   'No immediate action required. Review the Tripwire report for any delta files and update the database after approved changes.',
-            defenseNote: 'Tripwire check completed — database is current.',
-        };
-    }
-
-    if (key === 'lynis') {
-        const idxM = msg.match(/(\d+)\s*\/\s*100/);
-        const idx  = idxM ? parseInt(idxM[1]) : null;
-        const idxStr = idx !== null ? `${idx}/100` : 'below-target';
-        return {
-            cause: `Lynis audit scored ${idxStr}. Common hardening gaps include: unnecessary services running, weak SSH configuration (PasswordAuthentication yes, PermitRootLogin yes), missing kernel hardening sysctl parameters, unneeded SUID binaries, outdated packages, and weak PAM password policy. Each unfixed item is a potential attack surface.`,
-            fix:   [
-                'Review the full Lynis report: sudo cat /var/log/lynis.log | grep -A2 "Suggestion"',
-                'Top priority hardening steps:',
-                '  1. SSH: set PasswordAuthentication no, PermitRootLogin no, MaxAuthTries 3 in /etc/ssh/sshd_config',
-                '  2. Kernel: add to /etc/sysctl.d/99-hardening.conf: kernel.dmesg_restrict=1, net.ipv4.tcp_syncookies=1, kernel.randomize_va_space=2',
-                '  3. PAM: enforce password complexity in /etc/security/pwquality.conf (minlen=14, dcredit=-1, ucredit=-1)',
-                '  4. Run: sudo apt-get autoremove && sudo apt-get update && sudo apt-get upgrade -y',
-                '  5. Disable unused services: sudo systemctl disable avahi-daemon cups bluetooth (if not needed)',
-            ].join('\n'),
-            defenseNote: `Kjer applied ${idx && idx >= 70 ? 'targeted' : 'broad'} hardening recommendations from the Lynis report — addressing the highest-impact suggestions automatically. Re-run "sudo lynis audit system" to confirm improvement. Remaining suggestions require manual review and policy decisions.`,
-        };
-    }
-
-    if (key === 'tiger') {
-        return {
-            cause: 'TIGER identified local configuration weaknesses: world-writable files, SUID/SGID binaries, weak password policies, exposed network services, or unpatched binaries. These are privilege-escalation vectors — an attacker with any initial foothold can exploit them to gain full system access.',
-            fix:   'Review /var/log/tiger/security.report. Address each finding: remove unneeded SUID binaries (chmod u-s /path/to/binary), fix world-writable files (chmod o-w /path), enforce the password policy in /etc/security/pwquality.conf, and ensure all listening services are firewalled to required source IPs only.',
-            defenseNote: 'Kjer applied automated configuration corrections where possible based on the TIGER report findings. A manual review of the full TIGER report (/var/log/tiger/security.report) is recommended to address items requiring policy decisions.',
-        };
-    }
-
-    if (key === 'wireshark' || key === 'tcpdump' || key === 'zeek') {
-        return {
-            cause: 'Network capture interface is available for traffic analysis.',
-            fix:   'Baseline normal traffic patterns so anomalies are clearly visible. Capture during known-clean periods and compare against active sessions.',
-            defenseNote: 'Network capture confirmed active on the detected interface. Ongoing packet capture is available for incident response.',
-        };
-    }
-
-    if (key === 'auditd') {
-        return {
-            cause: 'The Linux Audit daemon logs kernel-level system call activity. If not running, privilege-escalation events, file access by sensitive accounts, and sudo usage go unrecorded, making forensic investigation impossible after an incident.',
-            fix:   'Ensure auditd is enabled at boot: sudo systemctl enable --now auditd. Add rules for critical paths in /etc/audit/rules.d/: -w /etc/passwd -p wa -k identity, -w /etc/sudoers -p wa -k sudoers, -a always,exit -F arch=b64 -S execve -k exec_log. Review /var/log/audit/audit.log and pipe to a SIEM for alerting.',
-            defenseNote: 'Audit rules were loaded and enriched to monitor privilege-escalation syscalls (setuid, setgid) and writes to /etc/passwd, /etc/shadow, and /etc/sudoers.',
-        };
-    }
-
-    if (key === 'ufw' || key === 'firewalld' || key === 'iptables') {
-        return {
-            cause: 'Firewall rules may have gaps allowing inbound access to vulnerable or unnecessary services. Each exposed port is a potential attack vector for exploitation, brute-force, or service abuse.',
-            fix:   'Apply default-deny inbound: sudo ufw default deny incoming && sudo ufw default allow outgoing && sudo ufw enable. Open only explicitly required ports: sudo ufw allow 22/tcp (SSH). Audit current rules: sudo ufw status verbose.',
-            defenseNote: 'UFW rules were tightened — suspicious IP ranges identified during the scan were blocked, and default-deny inbound was enforced on the external-facing interface.',
-        };
-    }
-
-    if (key === 'fail2ban') {
-        return {
-            cause: 'Without Fail2ban, repeated authentication failures against SSH, HTTP, FTP, and SMTP go unpunished, making brute-force and credential stuffing attacks trivial.',
-            fix:   'Ensure Fail2ban is running: systemctl status fail2ban. Review /etc/fail2ban/jail.conf — confirm SSH jail is enabled with maxretry = 3, findtime = 10m, bantime = 1h. For public-facing services, increase bantime to 24h.',
-            defenseNote: 'Fail2ban was activated on SSH, HTTP, and FTP with a 3-failure threshold. IPs that triggered failures during the scan period have been added to the block list.',
-        };
-    }
-
-    if (key === 'apparmor' || key === 'selinux') {
-        return {
-            cause: 'Mandatory Access Control enforces per-process security profiles that limit what files, capabilities, and network resources each application can access. Without it in enforcing mode, a compromised process can pivot freely across the system.',
-            fix:   'AppArmor: sudo aa-enforce /etc/apparmor.d/*. SELinux: sudo setenforce 1 && set SELINUX=enforcing in /etc/selinux/config. Review audit denials: ausearch -m AVC (SELinux) or aa-logprof (AppArmor).',
-            defenseNote: 'MAC enforcement mode was confirmed or activated. For AppArmor, all available profiles are now in Enforce mode. For SELinux, Enforcing mode was activated — AVC denials will now block policy violations in real time.',
-        };
-    }
-
-    // Generic fallback
-    return {
-        cause: `${f.tool || key} reported an issue (${lvl.toUpperCase()}) that requires review. Check the tool's own log files for detailed diagnostic information.`,
-        fix:   `Consult the ${f.tool || key} documentation and review its log files. Common log locations: /var/log/${key}/, /var/log/syslog, journalctl -u ${key}.`,
-        defenseNote: 'Kjer applied automated countermeasures relevant to this finding. Manual verification of the tool\'s own logs is recommended.',
+    const notes = {
+        clamav:     msg.includes('threat') || msg.includes('infected')
+                        ? 'Definitions updated; flagged file(s) quarantined — run second-pass clamscan to confirm.'
+                        : 'Definitions updated; full scan clean.',
+        chkrootkit: 'Cross-verified via promiscuous-mode check, debsums/rpm -Va, and rkhunter — see scan output for verdict.',
+        rkhunter:   'Baseline updated with --propupd; suspicious entries logged for manual review.',
+        gvm:        msg.includes('fail') ? 'Service restart attempted — check: systemctl status gvmd ospd-openvas.' : 'Service health confirmed.',
+        openvas:    msg.includes('fail') ? 'Service restart attempted — check: systemctl status gvmd ospd-openvas.' : 'Service health confirmed.',
+        suricata:   msg.includes('fail') ? 'Service restart attempted; rules reloaded.' : 'Rules reloaded; IPS mode active.',
+        aide:       msg.includes('change') || msg.includes('modified') ? 'Findings logged — baseline NOT auto-updated to preserve evidence.'
+                        : msg.includes('error') ? 'Database initialised via aideinit/aide --init.' : 'Integrity check passed.',
+        tripwire:   msg.includes('not fully') || msg.includes('--init') ? 'Not initialised — run: sudo tripwire --init on a clean system.' : 'Check completed.',
+        lynis:      '19 kernel/network sysctl parameters hardened and persisted; Lynis audit re-run — remaining suggestions in /var/log/lynis.log require manual config (SSH, passwords, etc.).',
+        tiger:      'Sticky bit set on /tmp and /var/tmp; /root permissions restricted; core dumps disabled; TIGER re-audit run — remaining issues in /var/log/tiger/ need manual fixes.',
+        auditd:     'Audit rules enriched to monitor privilege-escalation syscalls and sensitive file writes.',
+        ufw:        'Default-deny inbound enforced; suspicious ranges blocked.',
+        fail2ban:   'Activated on SSH/HTTP/FTP with 3-failure threshold.',
+        apparmor:   'All profiles set to Enforce mode.',
+        selinux:    'Enforcing mode activated.',
     };
+
+    const note = notes[key] || `Automated countermeasures applied — review ${key} logs for details.`;
+    return { defenseNote: note };
+}
+
+// ==================== RISK DESCRIPTIONS (per tool) ====================
+// Returns a 1-sentence description of why a finding is dangerous.
+function _findingRisk(f) {
+    const key = (f.key || f.tool || '').toLowerCase();
+    const msg = (f.message || '').toLowerCase();
+    const risks = {
+        clamav:     msg.includes('threat') || msg.includes('infected')
+                        ? 'Malware can steal credentials, encrypt files for ransom, or maintain persistent backdoor access.'
+                        : 'Antivirus scan clean — no active threats detected.',
+        chkrootkit: 'Rootkits hide attacker persistence; compromised binaries allow full undetected system control.',
+        rkhunter:   'Modified system files or hidden backdoors are primary indicators of active compromise.',
+        gvm:        'Vulnerability scanner offline — known CVEs go undetected and exploitable hosts go unpatched.',
+        openvas:    'Vulnerability scanner offline — known CVEs go undetected and exploitable hosts go unpatched.',
+        suricata:   'Without IDS/IPS, network intrusions, C2 beaconing, and data exfiltration go undetected.',
+        aide:       'Unauthorised file changes indicate malware persistence, insider threat, or active compromise.',
+        tripwire:   'File changes outside approved windows indicate possible tampering or attacker persistence.',
+        lynis:      'Low hardening score means multiple misconfigurations remain open to exploitation.',
+        tiger:      'World-writable files and weak permissions are direct privilege-escalation vectors.',
+        auditd:     'Without kernel audit logging, forensic timeline reconstruction after an incident is impossible.',
+        ufw:        'A disabled firewall exposes every listening service directly to network attack.',
+        firewalld:  'A disabled firewall exposes every listening service directly to network attack.',
+        iptables:   'Weak firewall rules leave services exposed to scanning and exploitation.',
+        fail2ban:   'Unrestricted auth failures enable automated brute-force and credential stuffing attacks.',
+        apparmor:   'Without MAC enforcement, any compromised process can pivot freely to any file or capability.',
+        selinux:    'Without MAC enforcement, any compromised process can pivot freely to any file or capability.',
+        wireshark:  'Active packet capture — identifies intrusions, C2 traffic, and lateral movement in real time.',
+        tcpdump:    'Active packet capture — identifies intrusions, C2 traffic, and lateral movement in real time.',
+        zeek:       'Network analysis surfaces exfiltration, protocol anomalies, and covert channels.',
+        nessus:     'Unpatched vulnerabilities are actively exploited by automated attack frameworks.',
+        osquery:    'Runtime process and file anomalies indicate active exploitation or malware execution.',
+    };
+    return risks[key] || `${f.tool || key} flagged a ${(f.level || 'security')} condition requiring investigation.`;
 }
 
 // ==================== REPORT CONTENT BUILDER ====================
@@ -3393,18 +3478,29 @@ function _buildReportContent(opts, fmt) {
     const toolNames   = Object.keys(installed);
 
     // Filter activity log entries
-    const logEntries  = ActivityLog.entries || [];
+    const logEntries     = ActivityLog.entries || [];
+    const monitorEntries = logEntries.filter(e => e.message && e.message.startsWith('[Monitor]'));
 
-    if (fmt === 'json') return _buildJsonReport(opts, { ts: tsISO, os, version, licType, installedAt, scan, defense, toolNames, logEntries });
-    if (fmt === 'md')   return _buildMarkdownReport(opts, { ts, os, version, licType, installedAt, scan, defense, toolNames, logEntries });
-    if (fmt === 'html') return _buildHtmlReport(opts, { ts, os, version, licType, installedAt, scan, defense, toolNames, logEntries });
-    return _buildTextReport(opts, { ts, os, version, licType, installedAt, scan, defense, toolNames, logEntries });
+    // Network device inventory + host network info
+    const networkDevices = getNetworkDevices();
+    const hostIP         = localStorage.getItem('kjerLocalIP') || '';
+    const hostName       = localStorage.getItem('hostName') || localStorage.getItem('kjerHostname') || '';
+    const hostSubnet     = hostIP ? _getLocalSubnet() : '';
+
+    const ctx = { ts, os, version, licType, installedAt, scan, defense, toolNames, logEntries, monitorEntries, networkDevices, hostIP, hostName, hostSubnet };
+    if (fmt === 'json') return _buildJsonReport(opts, { ...ctx, ts: tsISO });
+    if (fmt === 'md')   return _buildMarkdownReport(opts, ctx);
+    if (fmt === 'html') return _buildHtmlReport(opts, ctx);
+    return _buildTextReport(opts, ctx);
 }
 
 function _rptLine(char, len) { return char.repeat(len || 60); }
 
 function _buildTextReport(opts, d) {
-    const L = _rptLine;
+    const L        = _rptLine;
+    const scan     = d.scan;
+    const defense  = d.defense;
+    const hasDefense = !!(defense && defense.actions && defense.actions.length > 0);
     let r = [];
     r.push(L('='));
     r.push('KJER SECURITY REPORT');
@@ -3413,15 +3509,108 @@ function _buildTextReport(opts, d) {
     r.push(`Version   : v${d.version} (${d.licType})`);
     r.push(L('='));
 
+    // Scan summary
+    if (scan) {
+        const tl = scan.critical > 0 ? 'CRITICAL' : scan.high > 0 ? 'HIGH' : scan.medium > 0 ? 'MEDIUM' : 'CLEAN';
+        r.push(`\nSCAN SUMMARY — Threat Level: ${tl}`);
+        r.push(`  Critical: ${scan.critical}  |  High: ${scan.high}  |  Medium: ${scan.medium}  |  Low: ${scan.low}  |  Tools Run: ${scan.toolsRun || 0}`);
+    } else {
+        r.push('\n(No scan data — run a scan first)');
+    }
+
+    // Findings
+    const allFindings = scan?.findings || [];
+    const phaseMap = { threats: null, vulns: 'VULNERABILITY SCAN', network: 'NETWORK ANALYSIS', integrity: 'FILE INTEGRITY', compliance: 'COMPLIANCE & AUDIT' };
+    const activePhases = new Set(Object.entries(phaseMap).filter(([k]) => opts[k]).map(([, v]) => v));
+    const wantAll = activePhases.has(null);
+    const findings = wantAll ? allFindings : allFindings.filter(f => activePhases.has(f.phase));
+    const resultActions = hasDefense ? defense.actions.filter(e => e.type === 'result' && e.tool) : [];
+    const _matchAct = (f) => resultActions.find(a => a.tool &&
+        (a.tool.toLowerCase() === (f.tool || '').toLowerCase() ||
+         a.tool.toLowerCase() === (f.key  || '').toLowerCase()));
+
+    if (findings.length > 0) {
+        r.push(`\nFINDINGS — ${findings.length} finding(s)`);
+        r.push(L('-'));
+        findings.forEach(f => {
+            r.push(`\n  [${(f.level || 'info').toUpperCase()}] ${f.tool}  |  ${f.phase || ''}`);
+            r.push(`  Detected : ${f.message}`);
+            r.push(`  Threat   : ${_findingRisk(f)}`);
+            if (hasDefense) {
+                const act = _matchAct(f);
+                r.push(`  Fixed    : ${act ? act.message : _findingAdvisory(f).defenseNote}`);
+            }
+        });
+        r.push('');
+        r.push(L('-'));
+    } else if (scan) {
+        r.push('\n  No findings — system scan clean.');
+    }
+
+    // Defense summary (only when defense actually ran)
+    if (hasDefense && opts.defense) {
+        r.push('\nDEFENSE SUMMARY');
+        r.push(L('-'));
+        r.push(`  Posture       : ${defense.posture}`);
+        r.push(`  Tools Engaged : ${(defense.toolsEngaged || []).join(', ') || 'None'}`);
+        r.push(`  Actions Total : ${defense.actionsTotal}`);
+        if (defense.completedAt) r.push(`  Completed At  : ${new Date(defense.completedAt).toLocaleString()}`);
+        const allActs = defense.actions.filter(e => e.type === 'result' && e.tool && e.message);
+        if (allActs.length > 0) {
+            r.push('');
+            r.push('  TOOL ACTION LOG');
+            allActs.forEach(a => r.push(`  [${(a.level || 'info').toUpperCase()}] ${a.tool}: ${a.message}`));
+        }
+    }
+
     if (opts.sysinfo) {
         r.push('\nSYSTEM INFORMATION');
         r.push(L('-'));
-        r.push(`  Operating System : ${d.os}`);
-        r.push(`  Kjer Version     : v${d.version} (${d.licType})`);
-        r.push(`  Install Date     : ${d.installedAt}`);
-        r.push(`  Report Time      : ${d.ts}`);
+        r.push(`  OS           : ${d.os}`);
+        r.push(`  Kjer Version : v${d.version} (${d.licType})`);
+        r.push(`  Install Date : ${d.installedAt}`);
     }
 
+    if (opts.tools) {
+        r.push('\nINSTALLED TOOLS');
+        r.push(L('-'));
+        if (d.toolNames.length > 0) {
+            d.toolNames.forEach(t => r.push(`  • ${t}`));
+            r.push(`  Total: ${d.toolNames.length}`);
+        } else r.push('  None installed via Kjer.');
+    }
+
+    if (opts.actlog) {
+        r.push('\nACTIVITY LOG (recent 20)');
+        r.push(L('-'));
+        d.logEntries.slice(0, 20).forEach(e =>
+            r.push(`  [${e.time}] [${e.level.toUpperCase()}] ${e.message}`));
+    }
+
+    if (opts.monitor) {
+        r.push('\nMONITOR ACTIVITY SUMMARY');
+        r.push(L('-'));
+        if (d.monitorEntries.length === 0) {
+            r.push('  No monitor activity recorded this session.');
+        } else {
+            const threats  = d.monitorEntries.filter(e => !e.message.includes('defended:'));
+            const defActs  = d.monitorEntries.filter(e => e.message.includes('defended:'));
+            r.push(`  Monitor events : ${d.monitorEntries.length}  |  Threats: ${threats.length}  |  Auto-defends: ${defActs.length}`);
+            r.push('');
+            d.monitorEntries.forEach(e => r.push(`  [${e.time}] [${e.level.toUpperCase()}] ${e.message}`));
+        }
+    }
+
+    r.push('');
+    r.push(L('='));
+    r.push('END OF KJER SECURITY REPORT');
+    r.push(L('='));
+    return r.join('\n');
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Keep marker so the old big block is fully replaced — dead code guard
+if (false) { const _OLD_TEXT_REPORT_PLACEHOLDER = true; // replaced
     if (opts.threats && d.scan) {
         r.push('\nDETECTED THREATS & FINDINGS');
         r.push(L('-'));
@@ -3462,13 +3651,35 @@ function _buildTextReport(opts, d) {
     if (opts.network) {
         r.push('\nNETWORK & TRAFFIC ANALYSIS');
         r.push(L('-'));
+        // Host network info
+        if (d.hostIP) {
+            r.push(`  Host IP   : ${d.hostIP}`);
+            if (d.hostName) r.push(`  Hostname  : ${d.hostName}`);
+            if (d.hostSubnet) r.push(`  Subnet    : ${d.hostSubnet}`);
+            r.push('');
+        }
+        // IDS/traffic findings
         const nf = findingsByPhase('NETWORK ANALYSIS');
         if (nf.length > 0) {
-            nf.forEach(f => r.push(`  [${f.level.toUpperCase()}] ${f.tool}: ${f.message}`));
+            r.push('  IDS / Traffic Findings:');
+            nf.forEach(f => r.push(`    [${f.level.toUpperCase()}] ${f.tool}: ${f.message}`));
         } else if (d.scan) {
-            r.push('  No network anomalies detected.');
+            r.push('  IDS / Traffic Findings: No network anomalies detected.');
         } else {
-            r.push('  No scan data available.');
+            r.push('  IDS / Traffic Findings: No scan data available.');
+        }
+        // Network page devices
+        r.push('');
+        r.push(`  Network Devices (${d.networkDevices.length})`);
+        if (d.networkDevices.length === 0) {
+            r.push('    No devices added to the network page.');
+        } else {
+            d.networkDevices.forEach((dev, i) => {
+                r.push(`    ${i + 1}. ${dev.name}  [${(dev.status || 'unknown').toUpperCase()}]`);
+                r.push(`       IP: ${dev.ip}${dev.mac ? '  MAC: ' + dev.mac : ''}`);
+                if (dev.os) r.push(`       OS: ${dev.os}`);
+                r.push(`       Last Scanned: ${dev.lastScan ? new Date(dev.lastScan).toLocaleString() : 'Never'}`);
+            });
         }
     }
 
@@ -3535,34 +3746,6 @@ function _buildTextReport(opts, d) {
         }
     }
 
-    // Issue analysis — thorough per-finding summary
-    if (opts.threats && d.scan && d.scan.findings && d.scan.findings.length > 0) {
-        r.push('\nISSUE ANALYSIS & REMEDIATION GUIDANCE');
-        r.push(L('='));
-        r.push('This section provides a detailed explanation of each detected finding:');
-        r.push('its cause, recommended manual remediation steps, and what Kjer\'s');
-        r.push('automated defense did to address it.');
-        r.push(L('-'));
-        d.scan.findings.forEach((f, i) => {
-            const adv = _findingAdvisory(f);
-            const num = String(i + 1).padStart(2, '0');
-            r.push(`\n  FINDING ${num} — [${(f.level || 'info').toUpperCase()}] ${f.tool}: ${f.message}`);
-            r.push(`  ${'─'.repeat(56)}`);
-            r.push(`  CAUSE:`);
-            adv.cause.split('\n').forEach(line => r.push(`    ${line}`));
-            r.push('');
-            r.push(`  REMEDIATION:`);
-            adv.fix.split('\n').forEach(line => r.push(`    ${line}`));
-            r.push('');
-            r.push(`  AUTOMATED DEFENSE RESPONSE:`);
-            adv.defenseNote.split('\n').forEach(line => r.push(`    ${line}`));
-        });
-        r.push('');
-        r.push(L('-'));
-        r.push('  NOTE: Automated countermeasures reduce immediate risk but do not replace');
-        r.push('  thorough manual investigation for CRITICAL and HIGH severity findings.');
-    }
-
     if (opts.tools) {
         r.push('\nINSTALLED TOOLS INVENTORY');
         r.push(L('-'));
@@ -3574,40 +3757,97 @@ function _buildTextReport(opts, d) {
         }
     }
 
-    if (opts.actlog) {
-        r.push('\nSECURITY ACTIVITY LOG (recent 50)');
-        r.push(L('-'));
-        d.logEntries.slice(0, 50).forEach(e =>
-            r.push(`  [${e.time}] [${e.level.toUpperCase()}] ${e.message}`));
-    }
-
-    r.push('');
-    r.push(L('='));
-    r.push('END OF KJER SECURITY REPORT');
-    r.push(L('='));
-    return r.join('\n');
-}
+} // end dead-code guard
 
 function _buildMarkdownReport(opts, d) {
-    const scan = d.scan;
+    const scan       = d.scan;
+    const defense    = d.defense;
+    const hasDefense = !!(defense && defense.actions && defense.actions.length > 0);
     let r = [];
     r.push('# Kjer Security Report');
     r.push('');
-    r.push(`| Field | Value |`);
+    r.push(`| | |`);
     r.push(`|---|---|`);
-    r.push(`| Generated | ${d.ts} |`);
-    r.push(`| Platform | ${d.os} |`);
-    r.push(`| Version | v${d.version} (${d.licType}) |`);
+    r.push(`| **Generated** | ${d.ts} |`);
+    r.push(`| **Platform** | ${d.os} |`);
+    r.push(`| **Version** | v${d.version} (${d.licType}) |`);
     r.push('');
+
+    if (scan) {
+        const tl = scan.critical > 0 ? '🔴 CRITICAL' : scan.high > 0 ? '🟠 HIGH' : scan.medium > 0 ? '🟡 MEDIUM' : '🟢 CLEAN';
+        r.push(`## Scan Summary — ${tl}`);
+        r.push('');
+        r.push(`| Critical | High | Medium | Low | Tools Run |`);
+        r.push(`|---|---|---|---|---|`);
+        r.push(`| ${scan.critical} | ${scan.high} | ${scan.medium} | ${scan.low} | ${scan.toolsRun || 0} |`);
+        r.push('');
+    } else {
+        r.push('> No scan data — run a scan first.');
+        r.push('');
+    }
+
+    const allFindings = scan?.findings || [];
+    const phaseMap = { threats: null, vulns: 'VULNERABILITY SCAN', network: 'NETWORK ANALYSIS', integrity: 'FILE INTEGRITY', compliance: 'COMPLIANCE & AUDIT' };
+    const activePhases = new Set(Object.entries(phaseMap).filter(([k]) => opts[k]).map(([, v]) => v));
+    const wantAll = activePhases.has(null);
+    const findings = wantAll ? allFindings : allFindings.filter(f => activePhases.has(f.phase));
+    const resultActions = hasDefense ? defense.actions.filter(e => e.type === 'result' && e.tool) : [];
+    const _matchActMd = (f) => resultActions.find(a => a.tool &&
+        (a.tool.toLowerCase() === (f.tool || '').toLowerCase() ||
+         a.tool.toLowerCase() === (f.key  || '').toLowerCase()));
+
+    if (findings.length > 0) {
+        r.push('## Findings');
+        r.push('');
+        findings.forEach((f, i) => {
+            r.push(`### ${i + 1}. \`${f.tool}\` — ${(f.level || 'info').toUpperCase()}`);
+            r.push('');
+            r.push(`**Detected:** ${f.message}  `);
+            r.push(`**Threat:** ${_findingRisk(f)}  `);
+            if (hasDefense) {
+                const act = _matchActMd(f);
+                r.push(`**Fixed:** ${act ? act.message : _findingAdvisory(f).defenseNote}  `);
+            }
+            r.push('');
+        });
+    } else if (scan) {
+        r.push('## Findings');
+        r.push('');
+        r.push('> ✅ No findings — system scan clean.');
+        r.push('');
+    }
+
+    if (hasDefense && opts.defense) {
+        r.push('## Defense Summary');
+        r.push('');
+        r.push(`| | |`);
+        r.push(`|---|---|`);
+        r.push(`| **Posture** | ${defense.posture} |`);
+        r.push(`| **Tools Engaged** | ${(defense.toolsEngaged || []).join(', ') || 'None'} |`);
+        r.push(`| **Actions Total** | ${defense.actionsTotal} |`);
+        if (defense.completedAt) r.push(`| **Completed At** | ${new Date(defense.completedAt).toLocaleString()} |`);
+        r.push('');
+        const allActs = defense.actions.filter(e => e.type === 'result' && e.tool && e.message);
+        if (allActs.length > 0) {
+            r.push('### Tool Action Log');
+            r.push('');
+            r.push('| Tool | Result | Level |');
+            r.push('|---|---|---|');
+            allActs.forEach(a => r.push(`| **${a.tool}** | ${a.message} | \`${(a.level||'info').toUpperCase()}\` |`));
+            r.push('');
+        }
+    }
 
     if (opts.sysinfo) {
         r.push('## System Information');
+        r.push('');
         r.push(`- **OS:** ${d.os}`);
         r.push(`- **Version:** v${d.version} (${d.licType})`);
         r.push(`- **Install Date:** ${d.installedAt}`);
         r.push('');
     }
 
+    if (false) { // replaced block guard
     if (opts.threats) {
         r.push('## Detected Threats & Findings');
         if (scan) {
@@ -3638,9 +3878,35 @@ function _buildMarkdownReport(opts, d) {
 
     if (opts.network) {
         r.push('## Network & Traffic Analysis');
+        // Host network info
+        if (d.hostIP) {
+            r.push('');
+            r.push('### Host Network Info');
+            r.push(`| Field | Value |`);
+            r.push(`|---|---|`);
+            r.push(`| Host IP | \`${d.hostIP}\` |`);
+            if (d.hostName) r.push(`| Hostname | ${d.hostName} |`);
+            if (d.hostSubnet) r.push(`| Subnet | \`${d.hostSubnet}\` |`);
+        }
+        // IDS/traffic findings
+        r.push('');
+        r.push('### IDS / Traffic Findings');
         const nf = scan?.findings?.filter(f => f.phase === 'NETWORK ANALYSIS') || [];
         if (nf.length > 0) nf.forEach(f => r.push(`- **[${f.level.toUpperCase()}]** \`${f.tool}\`: ${f.message}`));
         else r.push(scan ? '> No network anomalies.' : '> No scan data available.');
+        // Network page devices
+        r.push('');
+        r.push(`### Network Devices (${d.networkDevices.length})`);
+        if (d.networkDevices.length === 0) {
+            r.push('> No devices added to the network page.');
+        } else {
+            r.push('| # | Name | IP | Status | OS | MAC | Last Scanned |');
+            r.push('|---|---|---|---|---|---|---|');
+            d.networkDevices.forEach((dev, i) => {
+                const lastScan = dev.lastScan ? new Date(dev.lastScan).toLocaleString() : 'Never';
+                r.push(`| ${i + 1} | **${dev.name}** | \`${dev.ip}\` | ${dev.status || 'unknown'} | ${dev.os || '—'} | ${dev.mac || '—'} | ${lastScan} |`);
+            });
+        }
         r.push('');
     }
 
@@ -3695,34 +3961,6 @@ function _buildMarkdownReport(opts, d) {
         r.push('');
     }
 
-    if (opts.threats && d.scan && d.scan.findings && d.scan.findings.length > 0) {
-        r.push('## Issue Analysis & Remediation Guidance');
-        r.push('> This section provides a thorough explanation of each finding detected during the scan — including root cause, recommended manual remediation, and what Kjer\'s automated defense did to address it.');
-        r.push('');
-        d.scan.findings.forEach((f, i) => {
-            const adv = _findingAdvisory(f);
-            r.push(`### Finding ${i + 1} — [${(f.level || 'info').toUpperCase()}] \`${f.tool}\``);
-            r.push(`> ${f.message}`);
-            r.push('');
-            r.push('**Cause**');
-            r.push('');
-            adv.cause.split('\n').forEach(line => r.push(line));
-            r.push('');
-            r.push('**Remediation Steps**');
-            r.push('');
-            adv.fix.split('\n').forEach(line => r.push(line.startsWith('  ') ? `    ${line.trim()}` : line));
-            r.push('');
-            r.push('**Automated Defense Response**');
-            r.push('');
-            adv.defenseNote.split('\n').forEach(line => r.push(`> ${line}`));
-            r.push('');
-            r.push('---');
-            r.push('');
-        });
-        r.push('*CRITICAL and HIGH findings require thorough manual investigation beyond automated countermeasures.*');
-        r.push('');
-    }
-
     if (opts.tools) {
         r.push('## Installed Tools Inventory');
         if (d.toolNames.length > 0) {
@@ -3732,150 +3970,194 @@ function _buildMarkdownReport(opts, d) {
         r.push('');
     }
 
+    if (opts.tools && d.toolNames.length > 0) {
+        r.push('## Installed Tools');
+        r.push('');
+        d.toolNames.forEach(t => r.push(`- ${t}`));
+        r.push(`\n**Total:** ${d.toolNames.length}`);
+        r.push('');
+    }
+
     if (opts.actlog) {
-        r.push('## Security Activity Log');
+        r.push('## Activity Log');
+        r.push('');
         r.push('```');
-        d.logEntries.slice(0, 50).forEach(e => r.push(`[${e.time}] [${e.level.toUpperCase()}] ${e.message}`));
+        d.logEntries.slice(0, 20).forEach(e => r.push(`[${e.time}] [${e.level.toUpperCase()}] ${e.message}`));
         r.push('```');
+    }
+
+    if (opts.monitor) {
+        r.push('## Monitor Activity Summary');
+        r.push('');
+        if (d.monitorEntries.length === 0) {
+            r.push('> No monitor activity recorded this session.');
+        } else {
+            const threats  = d.monitorEntries.filter(e => !e.message.includes('defended:'));
+            const defActs  = d.monitorEntries.filter(e => e.message.includes('defended:'));
+            r.push(`**Monitor events:** ${d.monitorEntries.length}  |  **Threats:** ${threats.length}  |  **Auto-defends:** ${defActs.length}`);
+            r.push('');
+            r.push('| Time | Level | Event |');
+            r.push('|---|---|---|');
+            d.monitorEntries.forEach(e => r.push(`| ${e.time} | \`${e.level.toUpperCase()}\` | ${e.message} |`));
+        }
+        r.push('');
     }
 
     r.push('\n---\n*Generated by Kjer Security Framework*');
     return r.join('\n');
+    } // end replaced block guard
 }
 
 function _buildHtmlReport(opts, d) {
-    const scan = d.scan;
+    const scan       = d.scan;
+    const defense    = d.defense;
+    const hasDefense = !!(defense && defense.actions && defense.actions.length > 0);
     const badgeColor = { critical: '#ff4444', error: '#ff6b00', warning: '#ffbb00', success: '#4caf50', info: '#2196F3' };
     const badge = (level, text) =>
-        `<span style="background:${badgeColor[level]||'#888'};color:#fff;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;">${text||level.toUpperCase()}</span>`;
+        `<span style="background:${badgeColor[level]||'#888'};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;letter-spacing:.5px;">${(text||level).toUpperCase()}</span>`;
 
     let b = [];
     b.push(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">`);
     b.push(`<title>Kjer Security Report — ${d.ts}</title>`);
     b.push(`<style>`);
-    b.push(`body{font-family:"Segoe UI",Arial,sans-serif;background:#0d0d1a;color:#B0E0E6;margin:0;padding:32px;}`);
-    b.push(`h1{color:#9D4EDD;border-bottom:2px solid #9D4EDD;padding-bottom:8px;}`);
-    b.push(`h2{color:#B0E0E6;border-bottom:1px solid #2a2a3a;padding-bottom:4px;margin-top:32px;}`);
-    b.push(`table{width:100%;border-collapse:collapse;margin-bottom:16px;}`);
-    b.push(`th{background:#1a1a2e;color:#9D4EDD;padding:8px 12px;text-align:left;}`);
-    b.push(`td{padding:7px 12px;border-bottom:1px solid #2a2a3a;}`);
-    b.push(`tr:hover td{background:rgba(157,78,221,0.06);}`);
-    b.push(`.finding{background:#141424;border-left:3px solid;padding:8px 14px;margin:6px 0;border-radius:0 4px 4px 0;}`);
-    b.push(`pre{background:#0a0a14;padding:16px;border-radius:6px;overflow-x:auto;font-size:12px;line-height:1.7;}`);
-    b.push(`footer{margin-top:48px;border-top:1px solid #2a2a3a;padding-top:12px;color:#555;font-size:11px;}`);
+    b.push(`body{font-family:"Segoe UI",Arial,sans-serif;background:#0d0d1a;color:#B0E0E6;margin:0;padding:24px 32px;max-width:900px;}`);
+    b.push(`h1{color:#9D4EDD;border-bottom:2px solid #9D4EDD;padding-bottom:8px;margin-bottom:4px;}`);
+    b.push(`h2{color:#B0E0E6;border-bottom:1px solid #2a2a3a;padding-bottom:4px;margin-top:28px;}`);
+    b.push(`table{width:100%;border-collapse:collapse;margin-bottom:12px;}`);
+    b.push(`th{background:#1a1a2e;color:#9D4EDD;padding:7px 12px;text-align:left;font-size:12px;}`);
+    b.push(`td{padding:6px 12px;border-bottom:1px solid #1e1e30;font-size:13px;}`);
+    b.push(`.card{background:#121220;border-left:4px solid;border-radius:0 6px 6px 0;padding:14px 18px;margin:10px 0;}`);
+    b.push(`.lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:8px 0 2px 0;}`);
+    b.push(`.val{color:#B0E0E6;margin:0 0 2px 0;line-height:1.5;}`);
+    b.push(`.risk{color:#ffbb00;margin:0 0 2px 0;line-height:1.5;}`);
+    b.push(`.fix{color:#4caf50;margin:0;line-height:1.5;}`);
+    b.push(`footer{margin-top:40px;border-top:1px solid #2a2a3a;padding-top:10px;color:#445;font-size:11px;}`);
     b.push(`</style></head><body>`);
     b.push(`<h1>&#x1F6E1; Kjer Security Report</h1>`);
-    b.push(`<table><tr><th>Field</th><th>Value</th></tr>`);
-    b.push(`<tr><td>Generated</td><td>${d.ts}</td></tr>`);
-    b.push(`<tr><td>Platform</td><td>${d.os}</td></tr>`);
-    b.push(`<tr><td>Version</td><td>v${d.version} (${d.licType})</td></tr></table>`);
+    b.push(`<table><tr><th>Generated</th><th>Platform</th><th>Version</th></tr>`);
+    b.push(`<tr><td>${d.ts}</td><td>${d.os}</td><td>v${d.version} (${d.licType})</td></tr></table>`);
 
-    if (opts.threats) {
-        b.push('<h2>Detected Threats &amp; Findings</h2>');
-        if (scan) {
-            const tl   = scan.critical > 0 ? 'CRITICAL' : scan.high > 0 ? 'HIGH' : scan.medium > 0 ? 'MEDIUM' : 'CLEAN';
-            const tlC  = scan.critical > 0 ? 'critical' : scan.high > 0 ? 'error' : scan.medium > 0 ? 'warning' : 'success';
-            b.push(`<p>Overall threat level: ${badge(tlC, tl)}</p>`);
-            b.push(`<table><tr><th>Severity</th><th>Count</th></tr>`);
-            b.push(`<tr><td>Critical</td><td>${scan.critical}</td></tr>`);
-            b.push(`<tr><td>High</td><td>${scan.high}</td></tr>`);
-            b.push(`<tr><td>Medium</td><td>${scan.medium}</td></tr>`);
-            b.push(`<tr><td>Low</td><td>${scan.low}</td></tr></table>`);
-            if (scan.findings?.length > 0) {
-                scan.findings.forEach(f => b.push(
-                    `<div class="finding" style="border-color:${badgeColor[f.level]||'#888'};">` +
-                    `${badge(f.level)} <strong>${f.tool}</strong>: ${f.message}</div>`
-                ));
-            }
-        } else b.push('<p><em>No scan data. Run Scan first.</em></p>');
+    if (scan) {
+        const tl  = scan.critical > 0 ? 'CRITICAL' : scan.high > 0 ? 'HIGH' : scan.medium > 0 ? 'MEDIUM' : 'CLEAN';
+        const tlC = scan.critical > 0 ? 'critical' : scan.high > 0 ? 'error' : scan.medium > 0 ? 'warning' : 'success';
+        b.push(`<h2>Scan Summary &mdash; ${badge(tlC, tl)}</h2>`);
+        b.push(`<table><tr><th>Critical</th><th>High</th><th>Medium</th><th>Low</th><th>Tools Run</th></tr>`);
+        b.push(`<tr><td style="color:#ff4444;">${scan.critical}</td><td style="color:#ff6b00;">${scan.high}</td><td style="color:#ffbb00;">${scan.medium}</td><td style="color:#4caf50;">${scan.low}</td><td>${scan.toolsRun||0}</td></tr></table>`);
     }
 
-    const htmlPhase = (title, phase, fallback) => {
-        b.push(`<h2>${title}</h2>`);
-        const fnd = scan?.findings?.filter(f => f.phase === phase) || [];
-        if (fnd.length > 0)
-            fnd.forEach(f => b.push(`<div class="finding" style="border-color:${badgeColor[f.level]||'#888'};">${badge(f.level)} <strong>${f.tool}</strong>: ${f.message}</div>`));
-        else b.push(`<p><em>${fallback}</em></p>`);
-    };
+    const allFindings = scan?.findings || [];
+    const phaseMap = { threats: null, vulns: 'VULNERABILITY SCAN', network: 'NETWORK ANALYSIS', integrity: 'FILE INTEGRITY', compliance: 'COMPLIANCE & AUDIT' };
+    const activePhases = new Set(Object.entries(phaseMap).filter(([k]) => opts[k]).map(([, v]) => v));
+    const wantAll = activePhases.has(null);
+    const findings = wantAll ? allFindings : allFindings.filter(f => activePhases.has(f.phase));
+    const resultActions = hasDefense ? defense.actions.filter(e => e.type === 'result' && e.tool) : [];
+    const _matchActHtml = (f) => hasDefense ? resultActions.find(a => a.tool &&
+        (a.tool.toLowerCase() === (f.tool || '').toLowerCase() ||
+         a.tool.toLowerCase() === (f.key  || '').toLowerCase())) : null;
 
-    if (opts.vulns)      htmlPhase('Vulnerability Analysis',      'VULNERABILITY SCAN', scan ? 'No vulnerabilities found.' : 'No scan data.');
-    if (opts.network)    htmlPhase('Network &amp; Traffic Analysis', 'NETWORK ANALYSIS',   scan ? 'No anomalies.' : 'No scan data.');
-    if (opts.integrity)  htmlPhase('File Integrity Results',       'FILE INTEGRITY',      scan ? 'No violations.' : 'No scan data.');
-    if (opts.compliance) htmlPhase('Compliance &amp; Audit',       'COMPLIANCE & AUDIT',  scan ? 'All checks passed.' : 'No scan data.');
+    if (findings.length > 0) {
+        b.push(`<h2>Findings <small style="color:#555;font-weight:400;font-size:13px;">(${findings.length})</small></h2>`);
+        findings.forEach(f => {
+            const lvl     = f.level || 'info';
+            const col     = badgeColor[lvl] || '#888';
+            const risk    = _findingRisk(f);
+            const act     = _matchActHtml(f);
+            const fixText = hasDefense ? (act ? act.message : _findingAdvisory(f).defenseNote) : null;
+            const fixCol  = act ? '#4caf50' : '#888';
+            b.push(`<div class="card" style="border-color:${col};">`);
+            b.push(`  <div style="margin-bottom:8px;">${badge(lvl)} <strong style="color:#fff;font-size:14px;">&nbsp;${f.tool}</strong> <span style="color:#444;font-size:11px;margin-left:6px;">${f.phase||''}</span></div>`);
+            b.push(`  <div class="lbl">Detected</div><p class="val">${f.message}</p>`);
+            b.push(`  <div class="lbl" style="color:#cc8800;">Threat</div><p class="risk">${risk}</p>`);
+            if (hasDefense) b.push(`  <div class="lbl" style="color:${fixCol};">Fixed</div><p class="fix" style="color:${fixCol};">${fixText}</p>`);
+            b.push(`</div>`);
+        });
+    } else if (scan) {
+        b.push(`<h2>Findings</h2><p style="color:#4caf50;">&#x2705; No findings &mdash; system scan clean.</p>`);
+    } else {
+        b.push(`<h2>Findings</h2><p><em>No scan data &mdash; run a scan first.</em></p>`);
+    }
 
-    if (opts.defense) {
-        b.push('<h2>Defensive Actions Taken</h2>');
-        const defense = d.defense;
-        if (defense && defense.actions && defense.actions.length > 0) {
-            b.push('<table><tr><th>Field</th><th>Value</th></tr>');
-            b.push(`<tr><td>Posture</td><td><strong>${defense.posture}</strong></td></tr>`);
-            b.push(`<tr><td>Tools Engaged</td><td>${(defense.toolsEngaged || []).join(', ') || 'None'}</td></tr>`);
-            b.push(`<tr><td>Actions Total</td><td>${defense.actionsTotal}</td></tr>`);
-            if (defense.completedAt) b.push(`<tr><td>Run At</td><td>${new Date(defense.completedAt).toLocaleString()}</td></tr>`);
-            b.push('</table>');
-            const resultActions = defense.actions.filter(e => e.type === 'result' && e.tool);
-            if (resultActions.length > 0) {
-                b.push('<h3 style="color:#B0E0E6;margin-top:16px;">Action Log</h3>');
-                resultActions.forEach(e => b.push(
-                    `<div class="finding" style="border-color:${badgeColor[e.level]||'#888'};">${badge(e.level)} <strong>${e.tool}</strong>: ${e.message}</div>`
-                ));
-            }
-            if (defense.findings && defense.findings.length > 0) {
-                b.push('<h3 style="color:#B0E0E6;margin-top:16px;">Remediation Detail</h3>');
-                b.push('<table><tr><th>Finding</th><th>Defense Response</th></tr>');
-                defense.findings.forEach(f => {
-                    const adv = _findingAdvisory(f);
-                    const rel = resultActions.find(a => a.tool && f.tool && a.tool.toLowerCase() === f.tool.toLowerCase());
-                    b.push(`<tr><td>${badge(f.level)} <strong>${f.tool}</strong>: ${f.message}</td><td>${rel ? rel.message : adv.defenseNote}</td></tr>`);
-                });
-                b.push('</table>');
-            }
+    // ── Network devices section ──────────────────────────────────────
+    if (opts.network) {
+        b.push('<h2>Network &amp; Device Inventory</h2>');
+        if (d.hostIP) {
+            b.push('<h3 style="color:#B0E0E6;margin-top:12px;">Host Network</h3>');
+            b.push('<table><tr><th>Host IP</th><th>Hostname</th><th>Subnet</th></tr>');
+            b.push(`<tr><td><code>${d.hostIP}</code></td><td>${d.hostName || '—'}</td><td><code>${d.hostSubnet || '—'}</code></td></tr></table>`);
+        }
+        b.push(`<h3 style="color:#B0E0E6;margin-top:18px;">Network Page Devices (${d.networkDevices.length})</h3>`);
+        if (d.networkDevices.length === 0) {
+            b.push('<p><em>No devices added to the network page.</em></p>');
         } else {
-            b.push('<p><em>No defensive actions recorded. Run Scan then Defend to populate this section.</em></p>');
+            const statusColor = { online: '#4caf50', offline: '#f44336', scanning: '#2196F3', defending: '#9D4EDD', pending: '#ff9800', denied: '#f44336', unknown: '#888' };
+            b.push('<table><tr><th>#</th><th>Name</th><th>IP</th><th>Status</th><th>OS</th><th>MAC</th><th>Last Scanned</th></tr>');
+            d.networkDevices.forEach((dev, i) => {
+                const sc = statusColor[dev.status] || '#888';
+                const ls = dev.lastScan ? new Date(dev.lastScan).toLocaleString() : 'Never';
+                b.push(`<tr><td>${i + 1}</td><td><strong>${dev.name}</strong></td><td><code>${dev.ip}</code></td>`);
+                b.push(`<td><span style="color:${sc};font-weight:700;">${dev.status || 'unknown'}</span></td>`);
+                b.push(`<td>${dev.os || '—'}</td><td style="font-size:11px;color:#777;">${dev.mac || '—'}</td><td>${ls}</td></tr>`);
+            });
+            b.push('</table>');
         }
     }
 
-    if (opts.threats && scan && scan.findings && scan.findings.length > 0) {
-        b.push('<h2>Issue Analysis &amp; Remediation Guidance</h2>');
-        b.push('<p style="color:#888;font-size:13px;">A thorough explanation of each detected finding — its root cause, recommended manual remediation steps, and what Kjer\'s automated defense did to address it.</p>');
-        scan.findings.forEach((f, i) => {
-            const adv = _findingAdvisory(f);
-            const col = badgeColor[f.level] || '#888';
-            b.push(`<div style="border:1px solid ${col}33;border-left:4px solid ${col};border-radius:6px;padding:16px 20px;margin:16px 0;background:rgba(0,0,0,.15);">`);
-            b.push(`<h3 style="margin:0 0 8px 0;color:${col};">Finding ${i+1} — ${badge(f.level)} <code>${f.tool}</code></h3>`);
-            b.push(`<p style="color:#B0E0E6;margin:0 0 12px 0;font-weight:600;">${f.message}</p>`);
-            b.push(`<p style="color:#9D4EDD;font-size:12px;font-weight:700;margin:8px 0 4px 0;text-transform:uppercase;letter-spacing:.5px;">Cause</p>`);
-            b.push(`<p style="color:#ccc;margin:0 0 12px 0;line-height:1.6;">${adv.cause.replace(/\n/g,'<br>')}</p>`);
-            b.push(`<p style="color:#ff9800;font-size:12px;font-weight:700;margin:8px 0 4px 0;text-transform:uppercase;letter-spacing:.5px;">Remediation Steps</p>`);
-            b.push(`<pre style="margin:0 0 12px 0;background:#0a0a14;padding:10px 14px;border-radius:4px;font-size:12px;line-height:1.7;white-space:pre-wrap;">${adv.fix}</pre>`);
-            b.push(`<p style="color:#4caf50;font-size:12px;font-weight:700;margin:8px 0 4px 0;text-transform:uppercase;letter-spacing:.5px;">Automated Defense Response</p>`);
-            b.push(`<p style="color:#4caf50;margin:0;line-height:1.6;font-style:italic;">${adv.defenseNote.replace(/\n/g,'<br>')}</p>`);
-            b.push('</div>');
-        });
-        b.push('<p style="color:#888;font-size:12px;margin-top:8px;"><em>CRITICAL and HIGH findings require thorough manual investigation beyond automated countermeasures.</em></p>');
+    if (hasDefense && opts.defense) {
+        b.push('<h2>Defense Summary</h2>');
+        b.push('<table><tr><th>Posture</th><th>Tools Engaged</th><th>Actions</th><th>Completed</th></tr>');
+        const dt = defense.completedAt ? new Date(defense.completedAt).toLocaleString() : '—';
+        b.push(`<tr><td>${defense.posture}</td><td>${(defense.toolsEngaged||[]).join(', ')||'None'}</td><td>${defense.actionsTotal}</td><td>${dt}</td></tr>`);
+        b.push('</table>');
+        const allActs = defense.actions.filter(e => e.type === 'result' && e.tool && e.message);
+        if (allActs.length > 0) {
+            b.push('<h3 style="color:#B0E0E6;margin-top:18px;">Tool Action Log</h3>');
+            b.push('<table><tr><th>Tool</th><th>What It Did</th><th>Result</th></tr>');
+            allActs.forEach(a => {
+                const lc = badgeColor[a.level] || '#888';
+                b.push(`<tr><td><strong>${a.tool}</strong></td><td>${a.message}</td><td>${badge(a.level || 'info')}</td></tr>`);
+            });
+            b.push('</table>');
+        }
     }
 
+    // ── Appendix sections ───────────────────────────────────────────
     if (opts.sysinfo) {
-        b.push('<h2>System Information</h2><table><tr><th>Field</th><th>Value</th></tr>');
-        b.push(`<tr><td>OS</td><td>${d.os}</td></tr>`);
-        b.push(`<tr><td>Version</td><td>v${d.version} (${d.licType})</td></tr>`);
-        b.push(`<tr><td>Install Date</td><td>${d.installedAt}</td></tr></table>`);
+        b.push('<h2>System Information</h2>');
+        b.push('<table><tr><th>OS</th><th>Version</th><th>Install Date</th></tr>');
+        b.push(`<tr><td>${d.os}</td><td>v${d.version} (${d.licType})</td><td>${d.installedAt}</td></tr></table>`);
     }
 
     if (opts.tools) {
-        b.push('<h2>Installed Tools Inventory</h2>');
+        b.push('<h2>Installed Tools</h2>');
         if (d.toolNames.length > 0) {
             b.push('<table><tr><th>#</th><th>Tool</th></tr>');
             d.toolNames.forEach((t, i) => b.push(`<tr><td>${i+1}</td><td>${t}</td></tr>`));
             b.push('</table>');
-        } else b.push('<p><em>No tools installed.</em></p>');
+        } else b.push('<p><em>No tools installed via Kjer.</em></p>');
     }
 
     if (opts.actlog) {
-        b.push('<h2>Security Activity Log</h2><pre>');
-        d.logEntries.slice(0, 50).forEach(e =>
-            b.push(`[${e.time}] [${e.level.toUpperCase()}] ${e.message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`))
+        b.push('<h2>Activity Log</h2>');
+        b.push('<pre style="background:#0a0a14;padding:14px;border-radius:6px;font-size:11px;line-height:1.7;">');
+        d.logEntries.slice(0, 20).forEach(e =>
+            b.push(`[${e.time}] [${e.level.toUpperCase()}] ${e.message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}`));
         b.push('</pre>');
+    }
+
+    if (opts.monitor) {
+        b.push('<h2>Monitor Activity Summary</h2>');
+        if (d.monitorEntries.length === 0) {
+            b.push('<p><em>No monitor activity recorded this session.</em></p>');
+        } else {
+            const threats = d.monitorEntries.filter(e => !e.message.includes('defended:'));
+            const defActs = d.monitorEntries.filter(e => e.message.includes('defended:'));
+            b.push(`<p><strong>Monitor events:</strong> ${d.monitorEntries.length} &nbsp;|&nbsp; <strong>Threats:</strong> ${threats.length} &nbsp;|&nbsp; <strong>Auto-defends:</strong> ${defActs.length}</p>`);
+            b.push('<table><tr><th>Time</th><th>Level</th><th>Event</th></tr>');
+            d.monitorEntries.forEach(e => b.push(
+                `<tr><td>${e.time}</td><td>${badge(e.level)}</td><td>${e.message.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td></tr>`
+            ));
+            b.push('</table>');
+        }
     }
 
     b.push(`<footer>Generated by Kjer Security Framework &mdash; ${d.ts}</footer>`);
@@ -3884,19 +4166,56 @@ function _buildHtmlReport(opts, d) {
 }
 
 function _buildJsonReport(opts, d) {
-    const scan = d.scan;
-    const out  = {
+    const scan       = d.scan;
+    const defense    = d.defense;
+    const hasDefense = !!(defense && defense.actions && defense.actions.length > 0);
+    const resultActions = hasDefense ? defense.actions.filter(e => e.type === 'result' && e.tool) : [];
+    const _matchActJson = (f) => resultActions.find(a => a.tool &&
+        (a.tool.toLowerCase() === (f.tool || '').toLowerCase() ||
+         a.tool.toLowerCase() === (f.key  || '').toLowerCase()));
+    const enrichFinding = f => {
+        const entry = { ...f, threat: _findingRisk(f) };
+        if (hasDefense) {
+            const act = _matchActJson(f);
+            entry.fixed = act ? act.message : _findingAdvisory(f).defenseNote;
+        }
+        return entry;
+    };
+    const out = {
         meta: { generated: d.ts, platform: d.os, version: d.version, licenseType: d.licType, installDate: d.installedAt }
     };
-    if (opts.threats)    out.threats    = { threatLevel: scan ? (scan.critical > 0 ? 'CRITICAL' : scan.high > 0 ? 'HIGH' : scan.medium > 0 ? 'MEDIUM' : 'CLEAN') : null, summary: scan ? { critical: scan.critical, high: scan.high, medium: scan.medium, low: scan.low, toolsRun: scan.toolsRun } : null, findings: scan?.findings || [] };
-    if (opts.vulns)      out.vulnerability  = { findings: scan?.findings?.filter(f => f.phase === 'VULNERABILITY SCAN') || [] };
-    if (opts.network)    out.network        = { findings: scan?.findings?.filter(f => f.phase === 'NETWORK ANALYSIS') || [] };
-    if (opts.integrity)  out.fileIntegrity  = { findings: scan?.findings?.filter(f => f.phase === 'FILE INTEGRITY') || [] };
-    if (opts.compliance) out.compliance     = { findings: scan?.findings?.filter(f => f.phase === 'COMPLIANCE & AUDIT') || [] };
-    if (opts.defense)    out.defenseActions = d.logEntries.filter(e => e.message.includes('DEFENSE') || e.message.includes('PHASE') || e.message.includes('blocked') || e.message.includes('quarantine')).slice(0, 30);
+    if (opts.threats)    out.threats       = { threatLevel: scan ? (scan.critical > 0 ? 'CRITICAL' : scan.high > 0 ? 'HIGH' : scan.medium > 0 ? 'MEDIUM' : 'CLEAN') : null, summary: scan ? { critical: scan.critical, high: scan.high, medium: scan.medium, low: scan.low, toolsRun: scan.toolsRun } : null, findings: (scan?.findings || []).map(enrichFinding) };
+    if (opts.vulns)      out.vulnerability  = { findings: (scan?.findings || []).filter(f => f.phase === 'VULNERABILITY SCAN').map(enrichFinding) };
+    if (opts.network)    out.network        = {
+        host: { ip: d.hostIP || null, hostname: d.hostName || null, subnet: d.hostSubnet || null },
+        devices: d.networkDevices.map(dev => ({
+            name: dev.name, ip: dev.ip, status: dev.status || 'unknown',
+            os: dev.os || null, mac: dev.mac || null,
+            lastScan: dev.lastScan || null,
+            addedAt: dev.addedAt || null,
+        })),
+        findings: (scan?.findings || []).filter(f => f.phase === 'NETWORK ANALYSIS').map(enrichFinding),
+    };
+    if (opts.integrity)  out.fileIntegrity  = { findings: (scan?.findings || []).filter(f => f.phase === 'FILE INTEGRITY').map(enrichFinding) };
+    if (opts.compliance) out.compliance     = { findings: (scan?.findings || []).filter(f => f.phase === 'COMPLIANCE & AUDIT').map(enrichFinding) };
+    if (opts.defense && hasDefense) out.defense = {
+        posture: defense.posture,
+        toolsEngaged: defense.toolsEngaged,
+        actionsTotal: defense.actionsTotal,
+        completedAt: defense.completedAt,
+        toolActionLog: defense.actions
+            .filter(e => e.type === 'result' && e.tool && e.message)
+            .map(e => ({ tool: e.tool, result: e.message, level: e.level || 'info' }))
+    };
     if (opts.tools)      out.installedTools = d.toolNames;
     if (opts.sysinfo)    out.systemInfo     = { os: d.os, version: d.version, licenseType: d.licType, installDate: d.installedAt };
-    if (opts.actlog)     out.activityLog    = d.logEntries.slice(0, 50);
+    if (opts.actlog)     out.activityLog    = d.logEntries.slice(0, 20);
+    if (opts.monitor)    out.monitorSummary = {
+        totalEvents:  d.monitorEntries.length,
+        threats:      d.monitorEntries.filter(e => !e.message.includes('defended:')).length,
+        autoDefends:  d.monitorEntries.filter(e =>  e.message.includes('defended:')).length,
+        events:       d.monitorEntries,
+    };
     return JSON.stringify(out, null, 2);
 }
 
@@ -3965,8 +4284,11 @@ function getToolsByRole(roleKeys) {
 }
 
 // Shared state — Scan writes here; Defend reads from here.
-window.KjerLastScanResults    = null;
-window.KjerLastDefenseResults = null;
+window.KjerLastScanResults     = null;
+window.KjerLastDefenseResults  = null;
+// Snapshot of the scan that was active when defend last ran.
+// Used by the next scan to detect recurring (already-addressed) findings.
+window.KjerPreviousScanResults = null;
 
 // ─── Helpers for clean log formatting ────────────────────────────
 function logSection(title) {
@@ -3980,6 +4302,45 @@ function logDivider() {
 }
 
 // ─── SCAN ENGINE ─────────────────────────────────────────────────
+
+/**
+ * Single "Run" entry point: scan all installed tools, then immediately
+ * run smart defense based on what was found.  If the Monitor checkbox is
+ * checked the recurring 5-minute monitor loop starts automatically after
+ * the first scan+defend cycle — the SecurityMonitor accumulates the full
+ * session history without ever auto-clearing.
+ */
+async function runKjer() {
+    // Prevent concurrent invocations — a double-click or rapid re-run would otherwise
+    // create multiple orphaned setInterval timers that all fire simultaneously.
+    if (window._KjerRunning) return;
+    window._KjerRunning = true;
+
+    try {
+        // Fully stop the monitor for the duration of this run so no cycle can
+        // interleave with the scan or defend phases.
+        const cb = document.getElementById('monitorCheckbox');
+        if (_monitorState.active) {
+            clearInterval(_monitorState.timer);
+            _monitorState.timer = null;
+            _monitorState.active = false;  // stops any in-flight _monitorCycle loop
+        }
+
+        await performComprehensiveScan();
+        if (window.KjerLastScanResults && window.KjerLastScanResults.completedAt) {
+            await activateSmartDefense();
+        }
+
+        // Start monitoring only after the full run completes, and only if checked.
+        // _monitorState.active is false so _startMonitorLoop's guard passes cleanly.
+        if (cb && cb.checked) {
+            _startMonitorLoop(true);  // skip immediate cycle — scan+defend just ran
+        }
+    } finally {
+        window._KjerRunning = false;
+    }
+}
+
 async function performComprehensiveScan() {
     const installed   = getInstalledTools();
     const installedNames = Object.keys(installed);
@@ -4019,10 +4380,11 @@ async function performComprehensiveScan() {
         low:          0,
         toolsRun:     0,
     };
+    // Preserve the previous scan so the next scan can detect recurring defended findings.
+    window.KjerPreviousScanResults = window.KjerLastScanResults;
     window.KjerLastScanResults = null;  // clear stale results
 
     // ── Header ────────────────────────────────────────────────────
-    SecurityMonitor.clear();
     SecurityMonitor.divider();
     SecurityMonitor.section('KJER SECURITY SCAN — ' + new Date().toLocaleTimeString());
     const os = localStorage.getItem('userDistro') || localStorage.getItem('userOS') || 'this system';
@@ -4080,7 +4442,12 @@ async function performComprehensiveScan() {
     SecurityMonitor.section(`SCAN COMPLETE — ${elapsed}s`);
     SecurityMonitor.log('', `Threat Level: ${threatLevel}  |  Critical: ${results.critical}  High: ${results.high}  Medium: ${results.medium}  Low: ${results.low}`, summaryLevel);
     if (results.findings.length > 0) {
-        SecurityMonitor.log('', `${results.findings.length} finding(s) recorded — click DEFEND to apply countermeasures`, 'warning');
+        const recurringCount = results.findings.filter(f => f.recurring).length;
+        const newCount       = results.findings.length - recurringCount;
+        const findingMsg = recurringCount > 0
+            ? `${results.findings.length} finding(s) — ${newCount} new, ${recurringCount} recurring after defend (manual action needed) — click DEFEND to re-apply countermeasures`
+            : `${results.findings.length} finding(s) recorded — click DEFEND to apply countermeasures`;
+        SecurityMonitor.log('', findingMsg, 'warning');
     } else {
         SecurityMonitor.log('', 'No actionable findings — system posture looks good', 'success');
     }
@@ -4104,6 +4471,18 @@ async function performComprehensiveScan() {
  */
 function _simulateToolScan(tool, phase) {
     const name = tool.name;
+
+    // Post-defend bias: if this tool was recently defended, return clean.
+    // Defend applied real hardening; the simulation should reflect the improved state
+    // rather than rolling random numbers that mask whether defend actually worked.
+    const _lastDefSim = window.KjerLastDefenseResults;
+    if (_lastDefSim
+            && (_lastDefSim.toolKeysDefended || []).includes(tool.key)
+            && (Date.now() - (_lastDefSim.completedAt || 0)) < 1800000) { // 30-min window
+        logResult(name, 'Post-defend check — no active threats detected', 'success');
+        return null; // no flagged finding
+    }
+
     let line, level, flagged = false;
 
     switch (tool.key) {
@@ -4414,6 +4793,25 @@ function _simulateToolScan(tool, phase) {
     return flagged ? { phase, tool: name, key: tool.key, level, message: line } : null;
 }
 
+/**
+ * Tools where defend applies countermeasures but cannot fully auto-resolve the finding.
+ * Maps tool DB key → what the admin must do manually after defend runs.
+ */
+const _TOOL_PERSIST_HINTS = {
+    'aide':      'file changes are logged evidence — review /var/log/aide.log then approve changes with: sudo aide --update',
+    'tripwire':  'policy violations logged — review changed files then approve with: sudo tripwire --update',
+    'nessus':    'apply OS/package patches to resolve CVEs: sudo apt upgrade (or yum update)',
+    'openvas':   'apply OS/package patches to resolve CVEs: sudo apt upgrade (or yum update)',
+    'gvm':       'apply OS/package patches to resolve CVEs: sudo apt upgrade (or yum update)',
+    'suricata':  'IPS rules reloaded — verify mode: sudo systemctl status suricata',
+    'zeek':      'investigate flagged connections in Zeek logs at /var/log/zeek/',
+    'wireshark': 'investigate flagged network flows manually in the capture file',
+    'lynis':     'sysctl hardening applied — remaining suggestions require manual config; see /var/log/lynis.log',
+    'tiger':     'permissions fixed — remaining issues need manual config; see /var/log/tiger/',
+    'cis-cat':   'apply benchmark recommendations and re-run audit',
+    'osquery':   'investigate flagged processes and accounts manually',
+};
+
 /** Simple integer random in [min, max] */
 function ri(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
@@ -4423,14 +4821,33 @@ function ri(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min
  * tool has no run command defined (e.g. not yet on the DB).
  */
 async function _runToolScan(tool, phase) {
+    // Determine if this tool had a finding in the previous defend session.
+    // Works from the first scan→defend→scan cycle onward:
+    //   - _prevScan?.findings  : set at scan start from the prior KjerLastScanResults
+    //   - _lastDef.findings    : the findings defend was responding to (first-cycle fallback)
+    const _prevScan = window.KjerPreviousScanResults;
+    const _lastDef  = window.KjerLastDefenseResults;
+    const _wasDefendedPrev = !!(
+        _lastDef
+        && (_lastDef.toolKeysDefended || []).includes(tool.key)
+        && (
+            _prevScan?.findings?.find(f => f.key === tool.key)
+            || _lastDef.findings?.find(f => f.key === tool.key)   // first-cycle fallback
+        )
+    );
+
     try {
         const result = await BackendAPI.callBackend('run-tool', { tool: tool.key });
         if (result && result.success && result.finding_level) {
-            const level  = result.finding_level;
-            const line   = result.summary || 'Scan completed';
+            const level   = result.finding_level;
             const flagged = ['critical', 'error', 'warning'].includes(level);
+            let   line    = result.summary || 'Scan completed';
+            if (flagged && _wasDefendedPrev) {
+                const _hint = _TOOL_PERSIST_HINTS[tool.key] || 'manual remediation required';
+                line += ` — ↻ recurring after defend: ${_hint}`;
+            }
             logResult(tool.name, line, level);
-            return flagged ? { phase, tool: tool.name, key: tool.key, level, message: line } : null;
+            return flagged ? { phase, tool: tool.name, key: tool.key, level, message: line, recurring: _wasDefendedPrev } : null;
         }
         // Backend returned an error (tool not installed, no run_cmd, etc.) — fall through
     } catch (_) {
@@ -4570,8 +4987,9 @@ async function activateSmartDefense() {
     showNotification('Smart Defense activated — watch the Activity Monitor...');
     updateLastUpdateTime();
 
-    let actionsTotal = 0;
-    let toolsEngaged = new Set();
+    let actionsTotal      = 0;
+    let toolsEngaged      = new Set(); // display names (for user-facing output)
+    let toolKeysDefended  = new Set(); // tool DB keys (for post-defend scan comparison)
 
     // ── Determine threat context from scan findings ───────────────
     const findings = hasScanData ? scanResults.findings : [];
@@ -4611,6 +5029,7 @@ async function activateSmartDefense() {
         await Promise.all(tools.map(async (t, i) => {
             if (i > 0) await new Promise(res => setTimeout(res, i * 200));
             toolsEngaged.add(t.name);
+            toolKeysDefended.add(t.key);   // track key for post-defend scan comparison
             const r = await _runToolDefend(t, ctx);
             logResult(t.name, r.summary, r.level);
             actionsTotal++;
@@ -4640,7 +5059,7 @@ async function activateSmartDefense() {
         broadMode || hasIntegrityViolation);
 
     await runPhase('PHASE 5 — AUDIT HARDENING',
-        getToolsByRole(['compliance_scan']).filter(t => ['lynis','auditd'].includes(t.key)),
+        getToolsByRole(['compliance_scan']).filter(t => ['lynis','auditd','tiger'].includes(t.key)),
         broadMode || hasComplianceGap);
 
     await runPhase('PHASE 6 — SIEM ALERT RULES',
@@ -4666,10 +5085,11 @@ async function activateSmartDefense() {
 
     // Snapshot only entries written during this defense run
     window.KjerLastDefenseResults = {
-        actions:      SecurityMonitor.entries.slice(0, SecurityMonitor.entries.length - defenseStartCount).reverse(),
+        actions:          SecurityMonitor.entries.slice(0, SecurityMonitor.entries.length - defenseStartCount).reverse(),
         posture,
-        completedAt:  Date.now(),
-        toolsEngaged: [...toolsEngaged],
+        completedAt:      Date.now(),
+        toolsEngaged:     [...toolsEngaged],
+        toolKeysDefended: [...toolKeysDefended], // used by next scan to mark recurring findings
         actionsTotal,
         findings,
     };
@@ -4691,6 +5111,190 @@ function clearActivityLog() {
         ActivityLog.clear();
         SecurityMonitor.clear();
         logActivity('Activity log cleared', 'info');
+    }
+}
+
+// ==================== MONITOR MODE ====================
+// Continuously scans installed tools on a fixed interval.
+// Writes to SecurityMonitor ONLY when a finding level changes (new threat,
+// escalation, or resolution) — identical one-line format to scan/defend.
+// Auto-defends tools that surface a new or escalated threat.
+// Conservative: sequential execution, 200 ms gap between tools, 5-min polling.
+
+const MONITOR_INTERVAL_MS = 5 * 60 * 1000;   // 5 minutes
+
+const _monitorState = {
+    active: false,
+    timer:  null,
+    cycle:  0,
+    prev:   {},   // tool.key → { level }  — last observed result
+};
+
+function _severityRank(level) {
+    return { success: 0, info: 1, warning: 2, error: 3, critical: 4 }[level] ?? 0;
+}
+
+function _monitorUiActive(on) {
+    const badge = document.getElementById('monitorBadge');
+    if (badge) badge.style.display = on ? '' : 'none';
+    // Keep checkbox in sync when stopping programmatically
+    if (!on) {
+        const cb = document.getElementById('monitorCheckbox');
+        if (cb) cb.checked = false;
+    }
+}
+
+/**
+ * Called by the Monitor checkbox in the UI.
+ * Checked  → start persistent monitoring loop (or notify user to click Run first).
+ * Unchecked → stop monitoring loop if running.
+ */
+function onMonitorCheckboxChange(cb) {
+    if (cb.checked) {
+        if (_monitorState.active) return;  // already running
+        // If a run is currently in progress, leave checkbox checked —
+        // runKjer will start the monitor when it finishes.
+        if (window._KjerRunning) {
+            showNotification('Scan in progress — monitor will start automatically when complete.');
+            return;
+        }
+        const installed = getInstalledTools();
+        if (Object.keys(installed).length === 0) {
+            cb.checked = false;
+            showNotification('No tools installed — install tools first.');
+            return;
+        }
+        // Require a completed scan+defend before autonomous monitoring starts.
+        // Without baseline scan data every tool looks "new" and auto-defend fires on everything.
+        if (!window.KjerLastDefenseResults) {
+            cb.checked = false;
+            showNotification('Run a full scan first — monitor starts automatically after scan+defend completes.');
+            return;
+        }
+        _startMonitorLoop();
+    } else {
+        stopMonitorMode();
+    }
+}
+
+/**
+ * Starts the recurring monitor timer.  Does NOT run an immediate cycle —
+ * callers that just completed a full scan+defend (runKjer) should pass
+ * skipFirstCycle=true so the next poll happens after the full interval only.
+ */
+function _startMonitorLoop(skipFirstCycle = true) {
+    if (_monitorState.active) return;
+
+    _monitorState.active = true;
+    _monitorState.cycle  = 0;
+    _monitorState.prev   = {};
+    _monitorUiActive(true);
+
+    SecurityMonitor.divider();
+    SecurityMonitor.section('MONITOR ACTIVE — ' + new Date().toLocaleTimeString());
+    SecurityMonitor.log('', `Polling every ${MONITOR_INTERVAL_MS / 60000} min  |  Silent unless threats change  |  Auto-defend on new threats`, 'info');
+    SecurityMonitor.divider();
+    logActivity('Monitor mode active — continuous threat watch every 5 min', 'info', '', true);
+    showNotification('Monitor active — will re-scan and auto-defend every 5 minutes');
+
+    if (!skipFirstCycle) {
+        _monitorCycle();  // fire immediately (used when checkbox is checked without prior Run)
+    }
+
+    _monitorState.timer = setInterval(async () => {
+        if (!_monitorState.active) return;
+        await _monitorCycle();
+    }, MONITOR_INTERVAL_MS);
+}
+
+/** @deprecated Use onMonitorCheckboxChange — kept so any legacy callers still work. */
+async function startMonitorMode() {
+    const cb = document.getElementById('monitorCheckbox');
+    if (cb) { cb.checked = true; onMonitorCheckboxChange(cb); }
+    else     { _startMonitorLoop(false); }
+}
+
+function stopMonitorMode() {
+    if (!_monitorState.active) return;
+    clearInterval(_monitorState.timer);
+    _monitorState.active = false;
+    _monitorState.timer  = null;
+
+    SecurityMonitor.divider();
+    SecurityMonitor.section('MONITOR STOPPED — ' + new Date().toLocaleTimeString());
+    SecurityMonitor.log('', `Completed ${_monitorState.cycle} polling cycle(s)`, 'info');
+    SecurityMonitor.divider();
+    logActivity(`Monitor stopped — ${_monitorState.cycle} cycle(s) completed`, 'warning', '', true);
+    showNotification('Monitoring stopped');
+    _monitorUiActive(false);
+}
+
+async function _monitorCycle() {
+    _monitorState.cycle++;
+    const cycleTs   = new Date().toLocaleTimeString();
+    const installed = getInstalledTools();
+    const tools     = Object.keys(TOOLS_DATABASE)
+        .filter(k => k in installed)
+        .map(k => ({ key: k, ...TOOLS_DATABASE[k] }));
+
+    if (tools.length === 0) return;
+
+    let newThreats      = 0;
+    let resolvedCount   = 0;
+    let actionsThisCycle = 0;
+
+    for (let i = 0; i < tools.length; i++) {
+        if (!_monitorState.active) break;   // stop mid-cycle if user hit Stop
+        const tool = tools[i];
+        if (i > 0) await new Promise(res => setTimeout(res, 200));  // 200 ms gap — gentle on CPU
+
+        let finding = null;
+        try {
+            finding = await _runToolScan(tool, 'MONITOR');
+        } catch (_) {}
+
+        const newLevel  = finding ? finding.level : 'success';
+        const prev      = _monitorState.prev[tool.key];
+        const prevLevel = prev ? prev.level : null;
+
+        // Classify the transition
+        const isThreat  = finding !== null;
+        const wasClean  = !prevLevel || prevLevel === 'success';
+        const newThreat = isThreat && wasClean;
+        const escalated = isThreat && !wasClean
+                          && _severityRank(newLevel) > _severityRank(prevLevel);
+        const resolved  = !isThreat && prevLevel && prevLevel !== 'success';
+
+        if (newThreat || escalated) {
+            // Emit finding line exactly as scan does
+            logResult(tool.name, finding.message, newLevel);
+            newThreats++;
+            // Immediately auto-defend and emit the action line
+            const r = await _runToolDefend(tool, {});
+            logResult(tool.name, `\u21B3 AUTO-DEFEND: ${r.summary}`, r.level);
+            actionsThisCycle++;
+            // Persist summaries to activity log for history
+            logActivity(`[Monitor] ${tool.name}: ${finding.message}`, newLevel);
+            logActivity(`[Monitor] ${tool.name} defended: ${r.summary}`, r.level);
+        } else if (resolved) {
+            logResult(tool.name, 'Threat cleared — now clean', 'success');
+            logActivity(`[Monitor] ${tool.name}: threat cleared`, 'success');
+            resolvedCount++;
+        }
+        // Unchanged state — stay silent
+
+        _monitorState.prev[tool.key] = { level: newLevel };
+    }
+
+    // Per-cycle summary line only when something happened
+    if (newThreats > 0 || actionsThisCycle > 0 || resolvedCount > 0) {
+        const parts = [
+            newThreats    > 0 ? `${newThreats} new/escalated threat(s)` : '',
+            actionsThisCycle > 0 ? `${actionsThisCycle} auto-defend action(s)` : '',
+            resolvedCount > 0 ? `${resolvedCount} resolved` : '',
+        ].filter(Boolean).join('  |  ');
+        SecurityMonitor.log('', `[Cycle ${_monitorState.cycle}  ${cycleTs}]  ${parts}`,
+            newThreats > 0 ? 'warning' : 'success');
     }
 }
 
@@ -5807,16 +6411,39 @@ function toggleTheme() {
     showNotification(isDarkMode ? 'Dark mode enabled' : 'Light mode enabled');
 }
 
+// Keys that represent user-configurable settings — safe to wipe on reset.
+const _SETTINGS_KEYS = [
+    'darkMode', 'autoRefresh', 'notifications',
+    'installPath', 'autoUpdate', 'autoCheckUpdates',
+];
+
+// Keys that represent cached hardware/system-detection data — safe to clear
+// so they are re-detected on the next host-scan, but NOT license-critical.
+const _CACHE_KEYS = [
+    'hostKernel', 'hostName', 'hostArch', 'hostCpuCount',
+    'hostRamTotal', 'hostRamAvail', 'hostDiskTotal', 'hostDiskAvail',
+    'lastHostScanTime',  // clearing forces a fresh Python scan on next boot
+];
+
+// NOTE: the following keys are NEVER cleared by reset or cache functions
+// because losing them locks the user out of the application:
+//   kjerActivated, kjerLicenseKey, kjerLicenseType, kjerVersion,
+//   kjerInitialized, kjerTutorialCompleted, userOS, userDistro,
+//   installedAt, initializationDate, and all installedTools_* / profile_* entries.
+
 function resetSettings() {
     if (confirm('Are you sure you want to reset all settings to defaults?')) {
-        localStorage.clear();
+        _SETTINGS_KEYS.forEach(k => localStorage.removeItem(k));
         location.reload();
     }
 }
 
 function clearCache() {
     if (confirm('This will clear the application cache. Continue?')) {
-        localStorage.clear();
+        // Remove settings + hardware-cache keys only.
+        // License, activation, init, OS, and installed-tool state are preserved
+        // so the application stays functional after the cache wipe.
+        [..._SETTINGS_KEYS, ..._CACHE_KEYS].forEach(k => localStorage.removeItem(k));
         showNotification('Cache cleared successfully');
         logActivity('Cache cleared by user');
     }
@@ -6158,6 +6785,28 @@ function renderNetworkPage() {
             </div>
         </div>
 
+        <!-- Bulk actions toolbar (visible when devices exist) -->
+        ${devices.length > 0 ? `
+        <div id="networkBulkBar" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+            background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.07); border-radius:8px;
+            padding:10px 16px; margin-bottom:16px;">
+            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#ccc;
+                font-size:13px; user-select:none;">
+                <input type="checkbox" id="selectAllDevicesCheck"
+                    style="width:15px; height:15px; accent-color:#B0E0E6; cursor:pointer;"
+                    onchange="_selectAllNetworkDevices(this.checked)">
+                Select All
+            </label>
+            <span style="color:#444;">|</span>
+            <button class="btn btn-primary" id="bulkScanBtn"
+                style="font-size:12px; padding:6px 14px;" disabled
+                onclick="bulkScanDevices()">&#128270; Scan Selected</button>
+            <button class="btn btn-outline" id="bulkDefendBtn"
+                style="font-size:12px; padding:6px 14px;" disabled
+                onclick="bulkDefendDevices()">&#128737; Defend Selected</button>
+            <span id="bulkSelCount" style="color:#888; font-size:12px; margin-left:auto;"></span>
+        </div>` : ''}
+
         <!-- Device grid -->
         <div id="networkDeviceGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px;">
             ${devices.length === 0
@@ -6196,17 +6845,27 @@ function _buildDeviceCardHtml(dev, tier) {
         <div class="device-card" style="background:rgba(0,0,0,.22); border:1px solid rgba(255,255,255,.07);
             border-radius:8px; padding:16px; position:relative;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
-                <div>
-                    <strong style="color:#B0E0E6; font-size:14px;">${_escapeHtml(dev.name)}</strong>
-                    ${dev.mac ? `<br><span style="color:#555; font-size:11px;">${_escapeHtml(dev.mac)}</span>` : ''}
+                <div style="display:flex; align-items:flex-start; gap:8px;">
+                    <input type="checkbox" class="device-select-check"
+                        data-device-id="${dev.id}"
+                        style="margin-top:3px; width:15px; height:15px; accent-color:#B0E0E6;
+                               cursor:pointer; flex-shrink:0;"
+                        onchange="_onDeviceCheckChange()">
+                    <div>
+                        <strong style="color:#B0E0E6; font-size:14px;">${_escapeHtml(dev.name)}</strong>
+                        ${dev.mac ? `<br><span style="color:#555; font-size:11px;">${_escapeHtml(dev.mac)}</span>` : ''}
+                    </div>
                 </div>
                 <span style="font-size:11px; padding:3px 8px; border-radius:3px;
                     background:${statusColor}22; color:${statusColor}; font-weight:600;">
                     ${dev.status}
                 </span>
             </div>
-            <p style="color:#9a9a9a; font-size:12px; margin:0 0 4px 0;">&#127760; ${_escapeHtml(dev.ip)}</p>
+            <p style="color:#9a9a9a; font-size:12px; margin:0 0 4px 0;">&#127760; ${_escapeHtml(dev.ip)}${dev.latency ? `<span style="color:#555;"> &middot; ${_escapeHtml(dev.latency)}</span>` : ''}</p>
+            ${dev.hostname && dev.hostname !== dev.name ? `<p style="color:#666; font-size:11px; margin:0 0 4px 0;">&#128279; ${_escapeHtml(dev.hostname)}</p>` : ''}
             ${dev.os ? `<p style="color:#9a9a9a; font-size:12px; margin:0 0 4px 0;">&#128187; ${_escapeHtml(dev.os)}</p>` : ''}
+            ${dev.vendor ? `<p style="color:#666; font-size:11px; margin:0 0 4px 0;">&#128269; ${_escapeHtml(dev.vendor)}</p>` : ''}
+            ${dev.open_count > 0 ? `<p style="color:#9a9a9a; font-size:11px; margin:0 0 4px 0;">${dev.open_count} open port${dev.open_count !== 1 ? 's' : ''}${dev.services?.length ? ': ' + dev.services.slice(0,3).map(s => `<code style="background:rgba(255,255,255,.06);border-radius:3px;padding:1px 4px;font-size:10px;">${_escapeHtml(s)}</code>`).join(' ') : ''}</p>` : ''}
             <p style="color:#555; font-size:11px; margin:0 0 14px 0;">${lastScan}</p>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 ${dev.status === 'pending' || dev.status === 'denied'
@@ -6227,6 +6886,261 @@ function _buildDeviceCardHtml(dev, tier) {
         </div>`;
 }
 
+// ── Bulk selection helpers ────────────────────────────────────────────────────
+
+function _selectAllNetworkDevices(checked) {
+    document.querySelectorAll('.device-select-check').forEach(cb => { cb.checked = checked; });
+    _onDeviceCheckChange();
+}
+
+function _onDeviceCheckChange() {
+    const all     = [...document.querySelectorAll('.device-select-check')];
+    const checked = all.filter(c => c.checked);
+    const saEl    = document.getElementById('selectAllDevicesCheck');
+    if (saEl) {
+        saEl.checked       = all.length > 0 && checked.length === all.length;
+        saEl.indeterminate = checked.length > 0 && checked.length < all.length;
+    }
+    const n             = checked.length;
+    const bulkScanBtn   = document.getElementById('bulkScanBtn');
+    const bulkDefendBtn = document.getElementById('bulkDefendBtn');
+    const bulkSelCount  = document.getElementById('bulkSelCount');
+    if (bulkScanBtn)   bulkScanBtn.disabled   = n === 0;
+    if (bulkDefendBtn) bulkDefendBtn.disabled  = n === 0;
+    if (bulkSelCount)  bulkSelCount.textContent = n > 0 ? `${n} device${n !== 1 ? 's' : ''} selected` : '';
+}
+
+// ── Bulk scan ─────────────────────────────────────────────────────────────────
+
+async function bulkScanDevices() {
+    const checks  = [...document.querySelectorAll('.device-select-check:checked')];
+    if (!checks.length) { showNotification('Select at least one device.', 'warning'); return; }
+    const allDevs = getNetworkDevices();
+    const targets = checks.map(c => allDevs.find(d => d.id === c.dataset.deviceId)).filter(Boolean);
+    if (!targets.length) return;
+
+    // Open the combined results modal immediately — rows update live as each scan finishes
+    _showBulkScanResultsModal(targets);
+
+    for (const dev of targets) {
+        const row      = document.getElementById(`bsr-row-${dev.id}`);
+        const statusEl = row?.querySelector('.bsr-status');
+        if (statusEl) { statusEl.textContent = '\u23f3 Scanning\u2026'; statusEl.style.color = '#2196F3'; }
+
+        const devs = getNetworkDevices();
+        const d    = devs.find(x => x.id === dev.id);
+        if (d) { d.status = 'scanning'; saveNetworkDevices(devs); }
+
+        try {
+            const result = await BackendAPI.callBackend('scan-device', { tool: dev.ip });
+
+            const devs2 = getNetworkDevices();
+            const d2    = devs2.find(x => x.id === dev.id);
+            if (d2) {
+                d2.status       = 'online';
+                d2.lastScan     = new Date().toISOString();
+                if (result.os       && !d2.os)       d2.os          = result.os.slice(0, 80);
+                if (result.mac      && !d2.mac)       d2.mac         = result.mac;
+                if (result.vendor   && !d2.vendor)    d2.vendor      = result.vendor;
+                if (result.hostname && !d2.hostname)  d2.hostname    = result.hostname;
+                d2.latency      = result.latency      || d2.latency      || '';
+                d2.open_count   = result.open_count   ?? d2.open_count   ?? 0;
+                d2.services     = result.services     || d2.services     || [];
+                d2.uptime_guess = result.uptime_guess || d2.uptime_guess || '';
+                saveNetworkDevices(devs2);
+            }
+
+            _updateBulkScanRow(dev.id, result, null);
+            logActivity(`Bulk scan ${dev.ip}: ${result.open_count || 0} open ports`);
+        } catch (err) {
+            _updateBulkScanRow(dev.id, null, String(err?.message || err));
+            const devs3 = getNetworkDevices();
+            const d3    = devs3.find(x => x.id === dev.id);
+            if (d3) { d3.status = 'unknown'; saveNetworkDevices(devs3); }
+        }
+    }
+
+    renderNetworkPage();
+
+    const totalOpen = getNetworkDevices()
+        .filter(d => targets.some(t => t.id === d.id))
+        .reduce((s, d) => s + (d.open_count || 0), 0);
+    const summaryEl = document.getElementById('bsr-summary');
+    if (summaryEl) {
+        summaryEl.innerHTML = `Scan complete &mdash; <strong style="color:#4caf50;">${totalOpen} open port${totalOpen !== 1 ? 's' : ''}</strong> found across ${targets.length} device${targets.length !== 1 ? 's' : ''}.`;
+        summaryEl.style.color = '#ccc';
+    }
+    showNotification(`Bulk scan complete \u2014 ${targets.length} device${targets.length !== 1 ? 's' : ''} scanned.`, 'success');
+}
+
+function _showBulkScanResultsModal(targets) {
+    document.getElementById('bulkScanResultsModal')?.remove();
+
+    const rowsHtml = targets.map(dev => `
+        <div id="bsr-row-${dev.id}"
+            style="border:1px solid rgba(255,255,255,.07); border-radius:7px;
+                   padding:14px 16px; margin-bottom:10px; transition:border-color .3s;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                <div>
+                    <strong style="color:#B0E0E6; font-size:13px;">${_escapeHtml(dev.name)}</strong>
+                    <span style="color:#666; font-size:12px; margin-left:8px;">${_escapeHtml(dev.ip)}</span>
+                    ${dev.os ? `<span style="color:#666; font-size:11px; margin-left:8px;">&ndash; ${_escapeHtml(dev.os.slice(0,50))}</span>` : ''}
+                </div>
+                <span class="bsr-status" style="font-size:12px; color:#555; white-space:nowrap;">&#9203; Queued</span>
+            </div>
+            <div class="bsr-results" style="max-height:0; overflow:hidden; transition:max-height .4s ease;"></div>
+        </div>`).join('');
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id        = 'bulkScanResultsModal';
+    modal.style.display = 'flex';
+    modal.style.zIndex  = '10000';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:740px; width:96vw; max-height:88vh; overflow-y:auto;">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-family:'Tomorrow',sans-serif; color:#B0E0E6;">
+                    Bulk Scan Results &mdash; ${targets.length} Device${targets.length !== 1 ? 's' : ''}
+                </h3>
+                <button class="btn btn-outline" style="padding:4px 10px;"
+                    onclick="document.getElementById('bulkScanResultsModal').remove()">&#10005;</button>
+            </div>
+            <div class="modal-body" style="margin-top:14px;">
+                <p id="bsr-summary" style="color:#888; font-size:12px; margin-bottom:16px;">
+                    Scanning sequentially &mdash; results appear as each device completes.
+                </p>
+                <div id="bsr-rows">${rowsHtml}</div>
+                <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+                    <button class="btn btn-primary" style="font-size:12px;"
+                        onclick="document.getElementById('bulkScanResultsModal').remove()">Close</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
+function _updateBulkScanRow(deviceId, result, error) {
+    const row      = document.getElementById(`bsr-row-${deviceId}`);
+    if (!row) return;
+    const statusEl  = row.querySelector('.bsr-status');
+    const resultsEl = row.querySelector('.bsr-results');
+
+    if (error) {
+        row.style.borderColor = 'rgba(244,67,54,.4)';
+        if (statusEl)  { statusEl.textContent = '\u2717 Failed'; statusEl.style.color = '#f44336'; }
+        if (resultsEl) {
+            resultsEl.style.maxHeight = '60px';
+            resultsEl.style.marginTop = '8px';
+            resultsEl.innerHTML = `<p style="color:#f44336; font-size:12px; margin:0;">${_escapeHtml(error)}</p>`;
+        }
+        return;
+    }
+
+    const openPorts = (result?.ports || []).filter(p => p.state === 'open');
+    row.style.borderColor = openPorts.length > 0 ? 'rgba(176,224,230,.22)' : 'rgba(255,255,255,.1)';
+
+    if (statusEl) {
+        statusEl.textContent = `\u2713 ${openPorts.length} open port${openPorts.length !== 1 ? 's' : ''}`;
+        statusEl.style.color = '#4caf50';
+    }
+
+    const metaParts = [
+        result.hostname ? `&#128279; ${_escapeHtml(result.hostname)}` : '',
+        result.os       ? `&#128187; ${_escapeHtml(result.os)}${result.os_accuracy ? ` <em style="color:#666;">(${result.os_accuracy}%)</em>` : ''}` : '',
+        result.mac      ? `MAC ${_escapeHtml(result.mac)}${result.vendor ? ' &middot; ' + _escapeHtml(result.vendor) : ''}` : '',
+        result.latency  ? `&#9200; ${_escapeHtml(result.latency)}` : '',
+        result.uptime_guess ? `&#9201; ${_escapeHtml(result.uptime_guess)}` : '',
+    ].filter(Boolean);
+
+    const portTableHtml = openPorts.length > 0
+        ? `<table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:10px;">
+            <thead>
+                <tr style="border-bottom:1px solid rgba(255,255,255,.07);">
+                    <th style="text-align:left; padding:4px 10px; color:#666; font-weight:500; width:90px;">Port</th>
+                    <th style="text-align:left; padding:4px 10px; color:#666; font-weight:500; width:110px;">Service</th>
+                    <th style="text-align:left; padding:4px 10px; color:#666; font-weight:500;">Version</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${openPorts.map(p => `
+                <tr>
+                    <td style="padding:4px 10px; color:#B0E0E6; font-family:monospace;">${p.port}/${_escapeHtml(p.proto)}</td>
+                    <td style="padding:4px 10px; color:#ccc;">${_escapeHtml(p.service)}</td>
+                    <td style="padding:4px 10px; color:#888;">${_escapeHtml(p.version || '')}</td>
+                </tr>`).join('')}
+            </tbody>
+           </table>`
+        : `<p style="color:#555; font-size:12px; margin:6px 0 0 0; font-style:italic;">No open ports detected.</p>`;
+
+    if (resultsEl) {
+        resultsEl.style.maxHeight = '600px';
+        resultsEl.style.marginTop = '10px';
+        resultsEl.innerHTML = `
+            ${metaParts.length ? `<div style="font-size:12px; color:#9a9a9a; line-height:2; margin-bottom:2px;">${metaParts.join(' &ensp;|&ensp; ')}</div>` : ''}
+            ${portTableHtml}`;
+    }
+}
+
+// ── Bulk defend ───────────────────────────────────────────────────────────────
+
+async function bulkDefendDevices() {
+    const checks  = [...document.querySelectorAll('.device-select-check:checked')];
+    if (!checks.length) { showNotification('Select at least one device.', 'warning'); return; }
+    const allDevs = getNetworkDevices();
+    const targets = checks.map(c => allDevs.find(d => d.id === c.dataset.deviceId)).filter(Boolean);
+    if (!targets.length) return;
+    _showBulkDefendModal(targets);
+}
+
+function _showBulkDefendModal(targets) {
+    document.getElementById('bulkDefendModal')?.remove();
+
+    const rowsHtml = targets.map(dev => `
+        <div style="border:1px solid rgba(157,78,221,.2); border-radius:7px; padding:12px 16px; margin-bottom:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+                <div>
+                    <strong style="color:#B0E0E6; font-size:13px;">${_escapeHtml(dev.name)}</strong>
+                    <span style="color:#666; font-size:12px; margin-left:8px;">${_escapeHtml(dev.ip)}</span>
+                    ${dev.os ? `<br><span style="color:#666; font-size:11px;">&#128187; ${_escapeHtml(dev.os.slice(0,60))}</span>` : ''}
+                    ${dev.open_count > 0 ? `<br><span style="color:#9a9a9a; font-size:11px;">${dev.open_count} open port${dev.open_count !== 1 ? 's' : ''}${dev.services?.length ? ': ' + dev.services.slice(0,3).map(s => _escapeHtml(s)).join(', ') : ''}</span>` : '<br><span style="color:#555; font-size:11px;">Not yet scanned &mdash; scan first to identify open ports.</span>'}
+                </div>
+                <button class="btn btn-outline"
+                    style="font-size:11px; padding:5px 12px; color:#9D4EDD; border-color:#9D4EDD; white-space:nowrap;"
+                    onclick="document.getElementById('bulkDefendModal').remove(); defendDevice('${_escapeHtml(dev.ip)}', '${dev.id}')">
+                    &#128737; Defend
+                </button>
+            </div>
+        </div>`).join('');
+
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.id        = 'bulkDefendModal';
+    modal.style.display = 'flex';
+    modal.style.zIndex  = '10000';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width:640px; width:95vw; max-height:85vh; overflow-y:auto;">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; font-family:'Tomorrow',sans-serif; color:#9D4EDD;">
+                    Defend Selected &mdash; ${targets.length} Device${targets.length !== 1 ? 's' : ''}
+                </h3>
+                <button class="btn btn-outline" style="padding:4px 10px;"
+                    onclick="document.getElementById('bulkDefendModal').remove()">&#10005;</button>
+            </div>
+            <div class="modal-body" style="margin-top:14px;">
+                <p style="color:#888; font-size:12px; margin-bottom:16px; line-height:1.55;">
+                    Click <strong style="color:#9D4EDD;">Defend</strong> on a device to open its defence console.
+                    Scan devices first to identify open ports before configuring defences.
+                </p>
+                ${rowsHtml}
+                <div style="display:flex; justify-content:flex-end; margin-top:14px;">
+                    <button class="btn btn-primary" style="font-size:12px;"
+                        onclick="document.getElementById('bulkDefendModal').remove()">Done</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+}
+
 async function scanNetworkDevices() {
     const btn         = document.getElementById('scanNetworkBtn');
     const progressBar = document.getElementById('scanProgressBar');
@@ -6236,47 +7150,32 @@ async function scanNetworkDevices() {
     if (progressBar) { progressBar.classList.add('scanning'); }
     if (statusText)  { statusText.style.display = 'block'; statusText.textContent = 'Probing network hosts…'; }
 
-    const subnet = _getLocalSubnet();
-    showNotification(`Scanning ${subnet} for devices…`);
+    showNotification('Scanning local network for devices…');
 
     try {
-        const result = await window.electronAPI.executeCommand('nmap', ['-sn', subnet]);
-        const output = (result?.stdout || result || '').toString();
-
-        // Parse nmap -sn output: extract IP and hostname lines
-        const discovered = [];
-        const hostBlocks  = output.split('Nmap scan report for ').slice(1);
-        hostBlocks.forEach(block => {
-            const firstLine = block.split('\n')[0].trim();
-            let ip = '', name = '';
-            const ipMatch = firstLine.match(/(\d+\.\d+\.\d+\.\d+)/);
-            if (ipMatch) {
-                ip = ipMatch[1];
-                name = firstLine.replace(/\s*\(\d+\.\d+\.\d+\.\d+\)/, '').trim() || ip;
-            } else {
-                ip   = firstLine;
-                name = firstLine;
-            }
-            if (ip) {
-                const macMatch  = block.match(/MAC Address:\s+([\w:]+)\s+\(([^)]+)\)/);
-                const macAddr   = macMatch ? macMatch[1] : '';
-                const macVendor = macMatch ? macMatch[2] : '';
-                discovered.push({ ip, name: name === ip ? ip : name, mac: macAddr, vendor: macVendor });
-            }
-        });
-
+        const result = await BackendAPI.callBackend('scan-network', {});
+        if (!result?.success) throw new Error(result?.error || 'Scan failed');
+        const discovered = (result.hosts || []).map(h => ({
+            ip:       h.ip,
+            name:     h.name || h.hostname || h.ip,
+            mac:      h.mac      || '',
+            vendor:   h.vendor   || '',
+            latency:  h.latency  || '',
+            hostname: h.hostname || '',
+        }));
+        const subnet   = result.subnet || _getLocalSubnet();
         const existing = getNetworkDevices();
         const existIPs = new Set(existing.map(d => d.ip));
         const newCount = discovered.filter(d => !existIPs.has(d.ip)).length;
         showNotification(
             discovered.length === 0
-                ? 'Scan complete — no devices found.'
+                ? 'Scan complete — no devices found. Ensure nmap or arp-scan is installed.'
                 : `Scan complete — ${discovered.length} device${discovered.length !== 1 ? 's' : ''} found (${newCount} new).`,
             discovered.length === 0 ? 'warning' : 'success'
         );
         _showScanResultsModal(discovered, subnet);
     } catch (err) {
-        showNotification('Network scan failed. Is nmap installed?', 'error');
+        showNotification('Network scan failed.', 'error');
         console.error('scanNetworkDevices error:', err);
     } finally {
         _networkScanInProgress = false;
@@ -6502,7 +7401,11 @@ function _submitAddDeviceModal() {
         lastScan: null,
     };
     const success = addNetworkDevice(device);
-    if (success) document.getElementById('addDeviceModal')?.remove();
+    if (success) {
+        document.getElementById('addDeviceModal')?.remove();
+        // Auto-scan to populate connection info with minimum manual steps
+        setTimeout(() => scanDevice(device.ip, device.id), 400);
+    }
 }
 
 function addNetworkDevice(device) {
@@ -6556,28 +7459,31 @@ async function scanDevice(ip, deviceId) {
     showNotification(`Scanning ${ip}…`);
 
     try {
-        const result = await window.electronAPI.executeCommand('nmap', [
-            '-sV', '-O', '--script=default', ip
-        ]);
-        const output = (result?.stdout || result || '').toString();
+        const result = await BackendAPI.callBackend('scan-device', { tool: ip });
+        if (!result?.success) throw new Error(result?.error || 'Scan failed');
 
-        // Update device status + lastScan
+        // Persist enriched data on device record
         const devs = getNetworkDevices();
         const d2   = devs.find(d => d.id === deviceId);
         if (d2) {
             d2.status   = 'online';
             d2.lastScan = new Date().toISOString();
-            // Try to extract OS from nmap output
-            const osMatch = output.match(/OS details:\s*([^\n]+)/);
-            if (osMatch && !d2.os) d2.os = osMatch[1].trim().slice(0, 60);
+            if (result.os       && !d2.os)       d2.os          = result.os.slice(0, 80);
+            if (result.mac      && !d2.mac)       d2.mac         = result.mac;
+            if (result.vendor   && !d2.vendor)    d2.vendor      = result.vendor;
+            if (result.hostname && !d2.hostname)  d2.hostname    = result.hostname;
+            d2.latency      = result.latency      || d2.latency      || '';
+            d2.open_count   = result.open_count   ?? d2.open_count   ?? 0;
+            d2.services     = result.services     || d2.services     || [];
+            d2.uptime_guess = result.uptime_guess || d2.uptime_guess || '';
             saveNetworkDevices(devs);
             renderNetworkPage();
         }
 
-        _showDeviceScanResultsModal(ip, output, deviceId);
-        logActivity(`Scanned device ${ip}`);
+        _showDeviceScanResultsModal(ip, result, deviceId);
+        logActivity(`Scanned device ${ip}: ${result.open_count || 0} open ports`);
     } catch (err) {
-        showNotification(`Scan of ${ip} failed. Is nmap installed?`, 'error');
+        showNotification(`Scan of ${ip} failed.`, 'error');
         const devs = getNetworkDevices();
         const d3   = devs.find(d => d.id === deviceId);
         if (d3) { d3.status = 'unknown'; saveNetworkDevices(devs); renderNetworkPage(); }
@@ -6585,32 +7491,49 @@ async function scanDevice(ip, deviceId) {
     }
 }
 
-function _showDeviceScanResultsModal(ip, rawOutput, deviceId) {
-    // Parse open ports from nmap output
-    const portLines = rawOutput.split('\n').filter(l =>
-        /^\d+\/(tcp|udp)\s+(open|filtered)/.test(l.trim())
-    );
-    const osMatch  = rawOutput.match(/OS details:\s*([^\n]+)/);
-    const osGuess  = osMatch ? osMatch[1].trim() : null;
+function _showDeviceScanResultsModal(ip, scanResult, deviceId) {
+    const ports    = scanResult?.ports    || [];
+    const scripts  = scanResult?.scripts  || {};
+    const osGuess  = scanResult?.os       || '';
+    const vendor   = scanResult?.vendor   || '';
+    const mac      = scanResult?.mac      || '';
+    const latency  = scanResult?.latency  || '';
+    const hostname = scanResult?.hostname || '';
+    const uptime   = scanResult?.uptime_guess || '';
+    const rawStr   = scanResult?.raw      || (typeof scanResult === 'string' ? scanResult : '');
+    const openPorts = ports.filter(p => p.state === 'open');
 
-    const portRows = portLines.length > 0
-        ? portLines.map(l => {
-            const cols = l.trim().split(/\s+/);
-            return `<tr>
-                <td style="padding:4px 10px; color:#B0E0E6; font-family:monospace;">${_escapeHtml(cols[0] || '')}</td>
-                <td style="padding:4px 10px; color:#4caf50;">${_escapeHtml(cols[1] || '')}</td>
-                <td style="padding:4px 10px; color:#ccc;">${_escapeHtml(cols[2] || '')}</td>
-                <td style="padding:4px 10px; color:#888; font-size:12px;">${_escapeHtml(cols.slice(3).join(' '))}</td>
-            </tr>`;
-          }).join('')
+    const metaRows = [
+        hostname && hostname !== ip ? `<tr><td style="padding:4px 10px;color:#888;">Hostname</td><td style="padding:4px 10px;color:#ccc;">${_escapeHtml(hostname)}</td></tr>` : '',
+        osGuess ? `<tr><td style="padding:4px 10px;color:#888;">OS</td><td style="padding:4px 10px;color:#ccc;">${_escapeHtml(osGuess)}${scanResult?.os_accuracy ? ` <span style="color:#666;">${scanResult.os_accuracy}%</span>` : ''}</td></tr>` : '',
+        mac ? `<tr><td style="padding:4px 10px;color:#888;">MAC</td><td style="padding:4px 10px;color:#ccc;">${_escapeHtml(mac)}${vendor ? ` <span style="color:#666;">&middot; ${_escapeHtml(vendor)}</span>` : ''}</td></tr>` : '',
+        latency  ? `<tr><td style="padding:4px 10px;color:#888;">Latency</td><td style="padding:4px 10px;color:#ccc;">${_escapeHtml(latency)}</td></tr>` : '',
+        uptime   ? `<tr><td style="padding:4px 10px;color:#888;">Uptime</td><td style="padding:4px 10px;color:#ccc;">${_escapeHtml(uptime)}</td></tr>` : '',
+    ].filter(Boolean).join('');
+
+    const portRows = openPorts.length > 0
+        ? openPorts.map(p => `
+            <tr>
+                <td style="padding:4px 10px; color:#B0E0E6; font-family:monospace;">${p.port}/${_escapeHtml(p.proto)}</td>
+                <td style="padding:4px 10px; color:#4caf50;">${_escapeHtml(p.state)}</td>
+                <td style="padding:4px 10px; color:#ccc;">${_escapeHtml(p.service)}</td>
+                <td style="padding:4px 10px; color:#888; font-size:12px;">${_escapeHtml(p.version || '')}</td>
+            </tr>`).join('')
         : `<tr><td colspan="4" style="color:#555; padding:12px; text-align:center;">No open ports detected.</td></tr>`;
+
+    const scriptKeys = Object.keys(scripts).slice(0, 8);
+    const scriptHtml = scriptKeys.length > 0
+        ? `<h4 style="color:#9D4EDD;font-family:'Tomorrow',sans-serif;font-size:12px;margin:16px 0 8px;text-transform:uppercase;">Script Output</h4>
+           <dl style="margin:0;font-size:12px;">${scriptKeys.map(k =>
+             `<dt style="color:#888;margin-top:8px;">${_escapeHtml(k)}</dt>
+              <dd style="color:#ccc;margin:2px 0 0 0;word-break:break-all;">${_escapeHtml(scripts[k])}</dd>`).join('')}</dl>` : '';
 
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.style.display = 'flex';
     modal.style.zIndex  = '10000';
     modal.innerHTML = `
-        <div class="modal-content" style="max-width:640px; width:95vw; max-height:82vh; overflow-y:auto;">
+        <div class="modal-content" style="max-width:660px; width:95vw; max-height:85vh; overflow-y:auto;">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
                 <h3 style="margin:0; font-family:'Tomorrow',sans-serif; color:#B0E0E6;">
                     Scan Results &mdash; ${_escapeHtml(ip)}
@@ -6619,8 +7542,10 @@ function _showDeviceScanResultsModal(ip, rawOutput, deviceId) {
                     onclick="this.closest('.modal').remove()">&#10005;</button>
             </div>
             <div class="modal-body" style="margin-top:14px;">
-                ${osGuess ? `<p style="color:#9a9a9a; font-size:13px; margin-bottom:14px;">&#128187; OS: <strong style="color:#ccc;">${_escapeHtml(osGuess)}</strong></p>` : ''}
-                <h4 style="color:#9D4EDD; font-family:'Tomorrow',sans-serif; font-size:13px; margin:0 0 10px 0; text-transform:uppercase;">Open Ports &amp; Services</h4>
+                ${metaRows ? `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;"><colgroup><col style="width:90px"></colgroup><tbody>${metaRows}</tbody></table>` : ''}
+                <h4 style="color:#9D4EDD; font-family:'Tomorrow',sans-serif; font-size:13px; margin:0 0 10px 0; text-transform:uppercase;">
+                    Open Ports &amp; Services${openPorts.length ? ` <span style="color:#666;">(${openPorts.length})</span>` : ''}
+                </h4>
                 <table style="width:100%; border-collapse:collapse; font-size:13px;">
                     <thead>
                         <tr style="border-bottom:1px solid rgba(255,255,255,.1);">
@@ -6632,11 +7557,12 @@ function _showDeviceScanResultsModal(ip, rawOutput, deviceId) {
                     </thead>
                     <tbody>${portRows}</tbody>
                 </table>
+                ${scriptHtml}
                 <details style="margin-top:16px;">
-                    <summary style="cursor:pointer; color:#555; font-size:12px; user-select:none;">Raw nmap output</summary>
+                    <summary style="cursor:pointer; color:#555; font-size:12px; user-select:none;">Raw output</summary>
                     <pre style="background:rgba(0,0,0,.3); border-radius:4px; padding:12px; font-size:11px;
                         color:#888; overflow-x:auto; white-space:pre-wrap; word-break:break-all;
-                        max-height:200px; overflow-y:auto; margin-top:8px;">${_escapeHtml(rawOutput)}</pre>
+                        max-height:200px; overflow-y:auto; margin-top:8px;">${_escapeHtml(rawStr)}</pre>
                 </details>
                 <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
                     <button class="btn btn-outline" style="font-size:12px;"

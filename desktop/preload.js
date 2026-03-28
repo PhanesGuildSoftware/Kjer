@@ -3,6 +3,23 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// ── Pre-seed localStorage from disk before app.js runs ───────────────────────
+// Reads ~/.kjer/ state files via a synchronous IPC call so that kjerInitialized,
+// kjerActivated, userOS, etc. are guaranteed to be present when DOMContentLoaded
+// fires — regardless of what happened to localStorage during a previous session.
+try {
+  const seed = ipcRenderer.sendSync('get-seed-state');
+  if (seed && typeof seed === 'object') {
+    for (const [key, value] of Object.entries(seed)) {
+      // Only write keys that are currently absent or empty — never overwrite
+      // values already in localStorage (e.g. a newer license key the user entered).
+      if (value && !localStorage.getItem(key)) {
+        localStorage.setItem(key, value);
+      }
+    }
+  }
+} catch (_) { /* non-fatal: app.js recovery paths handle missing values */ }
+
 contextBridge.exposeInMainWorld('electronAPI', {
     /**
      * Run a system command via the main process.
@@ -135,6 +152,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     writeFile: (filePath, content) =>
         ipcRenderer.invoke('write-file', filePath, content),
+
+    /**
+     * Read ~/.kjer/license_key.json directly from the Node process (no subprocess).
+     * Returns { success, key, type, version } or { success: false }.
+     */
+    readLicenseKey: () =>
+        ipcRenderer.invoke('read-license-key'),
 
     /** Listen for incoming connection requests pushed from the main process. */
     onConnectionRequest: (callback) =>

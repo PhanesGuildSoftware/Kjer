@@ -62,8 +62,11 @@
                         <h3>Quick Actions</h3>
                         <div class="action-buttons">
                             <button class="btn btn-primary" onclick="initializeKjer()"><i class="icon icon-refresh"></i> Initialize</button>
-                            <button class="btn btn-primary" onclick="performComprehensiveScan()"><i class="icon icon-scan"></i> Scan</button>
-                            <button class="btn btn-primary" onclick="activateSmartDefense()"><i class="icon icon-shield"></i> Defend</button>
+                            <button class="btn btn-primary" onclick="runKjer()" title="Scan all tools then immediately apply smart defense"><i class="icon icon-shield"></i> Run</button>
+                            <label id="monitorCheckboxLabel" title="When checked, Run will continue polling every 5 minutes and auto-defend on new threats" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--color-text-secondary,#aaa);font-size:13px;padding:0 6px;user-select:none;">
+                                <input type="checkbox" id="monitorCheckbox" onchange="onMonitorCheckboxChange(this)" style="cursor:pointer;width:14px;height:14px;">
+                                <i class="icon icon-eye"></i> Monitor
+                            </label>
                             <button class="btn btn-primary" onclick="generateReport()"><i class="icon icon-report"></i> Report</button>
                         </div>
                     </div>
@@ -71,6 +74,7 @@
                     <div class="card full-width activity-panel">
                         <div class="activity-header">
                             <h3 style="margin-left: 40px;">Security Activity Monitor</h3>
+                            <span id="monitorBadge" style="display:none;background:#1a3a1a;border:1px solid #4caf50;color:#4caf50;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;letter-spacing:0.5px;">&#9679; MONITORING</span>
                             <button class="btn-small" onclick="clearActivityLog()">Clear Log</button>
                         </div>
                         <div id="mainActivityLog" class="activity-log-container">
@@ -432,7 +436,7 @@
                     Enter your license key to activate Kjer. Each key unlocks all features for its tier and is bound to this machine.
                 </p>
                 <p style="color: #9D4EDD; margin-bottom: 16px; text-align: center; font-size: 12px;">
-                    Personal key &nbsp;·&nbsp; Enterprise key &nbsp;·&nbsp; One key per tier, all features included.
+                    Personal (Assisted) &nbsp;·&nbsp; Home (Semi-Auto) &nbsp;·&nbsp; Enterprise (Fully Automated) &nbsp;·&nbsp; Industrial (Autonomous)
                 </p>
                 <div class="form-group">
                     <label style="color: #9D4EDD;">License Key</label>
@@ -488,7 +492,9 @@
                     <label class="report-check-row"><input type="checkbox" id="rpt_tools">
                         <span><strong>Installed Tools Inventory</strong><br><small>Full list of managed security tools and their status</small></span></label>
                     <label class="report-check-row"><input type="checkbox" id="rpt_actlog">
-                        <span><strong>Security Activity Log</strong><br><small>Recent log entries from the Security Activity Monitor</small></span></label>
+                        <span><strong>Security Activity Log</strong><br><small>Full session log — all scan, defense, and monitor events</small></span></label>
+                    <label class="report-check-row"><input type="checkbox" id="rpt_monitor" checked>
+                        <span><strong>Monitor Activity Summary</strong><br><small>Threats detected and auto-defend actions taken during monitor cycles</small></span></label>
                 </div>
             </div>
 
